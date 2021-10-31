@@ -23,6 +23,8 @@ use ruffle_core::backend::ui::NullUiBackend;
 use ruffle_core::tag_utils::SwfMovie;
 use std::sync::{Arc, Mutex};
 use std::cell::RefCell;
+use std::mem::MaybeUninit;
+use env_logger::Env;
 use md5::Digest;
 
 ///*Note*: Only 1 of these should be enabled at a time
@@ -67,6 +69,9 @@ const FUZZ_DOUBLE_NAN: bool = false;
 
 /// Use random swf versions, otherwise only use 32 (latest)
 const RANDOM_SWF_VERSION:bool =false;
+
+/// Number of threads to use
+const THREAD_COUNT: i32 = 8;
 
 
 #[derive(Error, Debug)]
@@ -470,7 +475,7 @@ async fn open_flash_ptrace(bytes: &[u8]) -> Result<(String, Duration), MyError> 
     ptrace.vfs_mut().mock_file(&["/home/cub3d/.macromedia/Flash_Player/Logs/flashlog.txt"], vec![0u8]);
 
     ptrace.spawn(Box::new(|_pt, event| {
-        println!("Got event {:?}", event);
+        tracing::info!("Got event {:?}", event);
     }));
 
     let log_bytes = ptrace.vfs_mut().get_file_content_by_path("/home/cub3d/.macromedia/Flash_Player/Logs/flashlog.txt").unwrap();
@@ -509,14 +514,14 @@ async fn open_flash_cmd(bytes: Vec<u8>) -> Result<(String, Duration), MyError> {
     loop {
         popen.stdout.as_mut().unwrap().read_to_string(&mut log_content)?;
         // log_content = std::fs::read_to_string(&log_path)?;
-        // println!("{}", log_content);
+        // tracing::info!("{}", log_content);
         if log_content.contains("#CASE_COMPLETE#") {
             break;
         }
 
         if let Ok(Some(ex)) = popen.wait_timeout(Duration::from_millis(10)) {
             if !ex.success() {
-                println!("Flash crashed with {:?}", ex);
+                tracing::info!("Flash crashed with {:?}", ex);
                 tokio::fs::remove_file(&path).await?;
                 return Err(MyError::FlashCrash)
             } else {
@@ -601,11 +606,11 @@ fn fuzz(shared_state: Arc<Mutex<SharedFuzzState>>) -> Result<(), Box<dyn Error>>
                 break (swf_content, swf_md5);
             }
             if Instant::now().duration_since(start) > Duration::from_secs(30) && !warning_shown {
-                println!("No unique swfs generated in 30 seconds, are we done?");
+                tracing::info!("No unique swfs generated in 30 seconds, are we done?");
                 warning_shown = true;
             }
             if Instant::now().duration_since(start) > Duration::from_secs(120) {
-                println!("No unique swfs generated in 120 seconds, killing thread");
+                tracing::info!("No unique swfs generated in 120 seconds, killing thread");
                 return Ok(());
             }
         };
@@ -623,7 +628,7 @@ fn fuzz(shared_state: Arc<Mutex<SharedFuzzState>>) -> Result<(), Box<dyn Error>>
         let (flash_res, flash_dur) = match flash_result {
             Ok(x) => Ok(x),
             Err(MyError::FlashCrash) => {
-                println!("Flash crash detected, ignoring input");
+                tracing::info!("Flash crash detected, ignoring input");
                 continue;
             }
             Err(e) => Err(e)
@@ -635,7 +640,7 @@ fn fuzz(shared_state: Arc<Mutex<SharedFuzzState>>) -> Result<(), Box<dyn Error>>
 
         // Did we find a mismatch
         if ruffle_res != flash_res {
-            println!("Found mismatch");
+            tracing::info!("Found mismatch");
             let new_name = format!("{:x}", swf_md5);
             let specific_failure_dir = PathBuf::from_str(FAILURES_DIR).expect("No failures-other dir").join(new_name);
 
@@ -650,7 +655,7 @@ fn fuzz(shared_state: Arc<Mutex<SharedFuzzState>>) -> Result<(), Box<dyn Error>>
         iters += 1;
 
         if overall_duration > Duration::from_secs(1) {
-            println!("iters/s = {}, duration = {:?}, ruffle={:?}, flash={:?}", iters, overall_duration / iters, ruffle_duration/iters, flash_duration/iters);
+            tracing::info!("iters/s = {}, duration = {:?}, ruffle={:?}, flash={:?}", iters, overall_duration / iters, ruffle_duration/iters, flash_duration/iters);
             overall_duration = Duration::ZERO;
             ruffle_duration = Duration::ZERO;
             flash_duration = Duration::ZERO;
@@ -675,21 +680,21 @@ async fn check_failures() -> Result<(), Box<dyn Error>> {
         let expected = std::fs::read_to_string(flash_output_path.to_str().unwrap())?;
 
         if ruffle_res != expected {
-            println!("---------- Found mismatch ----------");
-            println!("Test case = {}", entry.file_name().to_string_lossy());
-            println!("Ruffle output:");
-            println!("{}", ruffle_res);
-            println!("Flash output:");
-            println!("{}", expected);
-            println!("------------------------------------");
+            tracing::info!("---------- Found mismatch ----------");
+            tracing::info!("Test case = {}", entry.file_name().to_string_lossy());
+            tracing::info!("Ruffle output:");
+            tracing::info!("{}", ruffle_res);
+            tracing::info!("Flash output:");
+            tracing::info!("{}", expected);
+            tracing::info!("------------------------------------");
             failed += 1;
         } else {
-            println!("Test case {} - Passed", entry.file_name().to_string_lossy());
+            tracing::info!("Test case {} - Passed", entry.file_name().to_string_lossy());
         }
         total += 1;
     }
 
-    println!("Overall results: {}/{} failed", failed, total);
+    tracing::info!("Overall results: {}/{} failed", failed, total);
 
     Ok(())
 }
@@ -710,6 +715,8 @@ struct SharedFuzzState {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    env_logger::Builder::from_env(Env::default().default_filter_or("flash_fuzz=info")).init();
+
     // create the run dir
     std::fs::create_dir_all(FAILURES_DIR)?;
     std::fs::create_dir_all(INPUTS_DIR)?;
@@ -721,15 +728,25 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     //TODO: setup mm.cfg
 
-    println!("Starting fuzz loop");
+    tracing::info!("Starting fuzz loop");
 
     let state = Arc::new(Mutex::new(SharedFuzzState::default()));
 
-    let THREAD_COUNT = 8;
-
-    let threads = (0..THREAD_COUNT).map(|_| {
+    // Create thread for each fuzzing job
+    let threads = (0..THREAD_COUNT).map(|thread_index| {
         let state_copy = Arc::clone(&state);
-        std::thread::spawn(|| {
+        std::thread::spawn(move || {
+            let tid = unsafe { libc::pthread_self() };
+            // let mut bs = bitset::BitSet::with_capacity(64);
+            // bs.set(thread_index as usize, true);
+
+            let mut cpu_set: libc::cpu_set_t = unsafe { MaybeUninit::zeroed().assume_init() };
+            unsafe { libc::CPU_ZERO(&mut cpu_set) };
+            unsafe { libc::CPU_SET(thread_index as usize, &mut cpu_set) };
+
+            unsafe { libc::sched_setaffinity(tid as i32, core::mem::size_of::<libc::cpu_set_t>(), &cpu_set) };
+
+            // Start fuzzing
             let _ = fuzz(state_copy).expect("Thread failed");
         })
     }).collect::<Vec<_>>();
@@ -739,18 +756,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // let _ = fuzz().await?;
     // check_failures();
-
-    // ptrace version leaves behind processes on exit
-    // cmd version works in docker
-    // ptrace version does not work in docker but can run parallel
-    // cmd version faster than ptrace
-    // best solution would be one docker container with multithread cmd version
-    // to multithread cmd, need to write a redirector based on LD_PRELOAD
-    // idea:
-    // Figure out how to pass args
-    // intercept the open/stat/truncate/write calls,
-    // initial goal: convert log write to print? so we can grab it with a pipe on stdout?
-    // then maybe use
 
     Ok(())
 }
