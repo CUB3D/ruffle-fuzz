@@ -1,0 +1,16 @@
+version: '3.2'
+services:
+  fuzzer:
+#    build: .
+    image: flash-fuzz_fuzzer
+    deploy:
+      replicas: 24
+    volumes:
+    - failures:/home/code/run/failures/
+
+volumes:
+  failures:
+    driver_opts:
+      type: "nfs"
+      o: "addr=nfs-share.lan,nolock,soft,rw"
+      device: ":/raid/nfs/Projects/Ruffle/Flash-Fuzz-Failures"
