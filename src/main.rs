@@ -71,7 +71,7 @@ const FUZZ_DOUBLE_NAN: bool = false;
 const RANDOM_SWF_VERSION:bool =false;
 
 /// Number of threads to use
-const THREAD_COUNT: i32 = 8;
+const THREAD_COUNT: i32 = 32;
 
 
 #[derive(Error, Debug)]
@@ -362,8 +362,8 @@ fn make_swf() -> Result<Vec<u8>, Box<dyn Error>> {
         //TODO: ActionAdd produces errors in some cases
         // todo: so does less
         let (action, arg_count) = select(&mut rng, &[
-            // (Action::Add, 2),
-   /*         (Action::Add2, 2),
+             (Action::Add, 2),
+            (Action::Add2, 2),
             (Action::And, 2),
             (Action::AsciiToChar, 1),
             (Action::BitAnd, 2),
@@ -390,9 +390,9 @@ fn make_swf() -> Result<Vec<u8>, Box<dyn Error>> {
             (Action::Increment, 1),
             // (Action::InitArray, ?), TODO: special handling
             // (Action::InitObject, ?), TODO: special handling
-            (Action::InstanceOf, 2),*/
+            (Action::InstanceOf, 2),
             (Action::Less, 2),
-      /*      (Action::Less2, 2),
+            (Action::Less2, 2),
             (Action::MBAsciiToChar, 1),
             (Action::MBCharToAscii, 1),
             (Action::MBStringExtract, 3),
@@ -424,7 +424,7 @@ fn make_swf() -> Result<Vec<u8>, Box<dyn Error>> {
             (Action::ToString, 1),
             (Action::ToggleQuality, 0),
             (Action::Trace, 1),
-            (Action::TypeOf, 1),*/
+            (Action::TypeOf, 1),
             //_
         ]);
 
@@ -502,6 +502,7 @@ async fn open_flash_cmd(bytes: Vec<u8>) -> Result<(String, Duration), MyError> {
 
     let cmd = Exec::cmd(FLASH_PLAYER_BINARY)
         .env("LD_PRELOAD", "./utils/path-mapping.so")
+        .env("DISPLAY", ":2")
         .args(&[path.clone()])
         .stderr(Redirection::File(std::fs::File::open("/dev/null").unwrap()))
         .stdout(Redirection::Pipe)
@@ -605,12 +606,12 @@ fn fuzz(shared_state: Arc<Mutex<SharedFuzzState>>) -> Result<(), Box<dyn Error>>
                shared_state.attempted.push(swf_md5);
                 break (swf_content, swf_md5);
             }
-            if Instant::now().duration_since(start) > Duration::from_secs(30) && !warning_shown {
-                tracing::info!("No unique swfs generated in 30 seconds, are we done?");
+            if Instant::now().duration_since(start) > Duration::from_secs(10) && !warning_shown {
+                tracing::info!("No unique swfs generated in 10 seconds, are we done?");
                 warning_shown = true;
             }
-            if Instant::now().duration_since(start) > Duration::from_secs(120) {
-                tracing::info!("No unique swfs generated in 120 seconds, killing thread");
+            if Instant::now().duration_since(start) > Duration::from_secs(30) {
+                tracing::info!("No unique swfs generated in 30 seconds, killing thread");
                 return Ok(());
             }
         };
@@ -726,6 +727,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Ensure that the flash log exists or we will crash
     let _ = clear_flash_log()?;
 
+    // Start dedicated X server for fuzzing on linux TODO
+    // #[cfg(target_os = "linux")]
+    //     let _ = {
+    //     Exec::cmd("sudo")
+    //         .args(&["echo"])
+    //         .join().expect("Failed to elevate")
+    // };
+    // #[cfg(target_os = "linux")]
+    //     let popen = {
+    //         Exec::cmd("sudo")
+    //             .args(&["Xorg", ":2", "-config", "./docker-fuzz/xorg.conf", "-noreset", "-logfile", "/dev/null"])
+    //             .popen().expect("Failed to start Xorg server for fuzzing")
+    //     };
+
     //TODO: setup mm.cfg
 
     tracing::info!("Starting fuzz loop");
@@ -736,15 +751,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     let threads = (0..THREAD_COUNT).map(|thread_index| {
         let state_copy = Arc::clone(&state);
         std::thread::spawn(move || {
-            let tid = unsafe { libc::pthread_self() };
-            // let mut bs = bitset::BitSet::with_capacity(64);
-            // bs.set(thread_index as usize, true);
-
-            let mut cpu_set: libc::cpu_set_t = unsafe { MaybeUninit::zeroed().assume_init() };
-            unsafe { libc::CPU_ZERO(&mut cpu_set) };
-            unsafe { libc::CPU_SET(thread_index as usize, &mut cpu_set) };
-
-            unsafe { libc::sched_setaffinity(tid as i32, core::mem::size_of::<libc::cpu_set_t>(), &cpu_set) };
+            // Attempt to pin threads to cores on linux (dissabled for now)
+            // #[cfg(target_os = "linux")]
+            //     {
+            //         let tid = unsafe { libc::pthread_self() };
+            //
+            //         let mut cpu_set: libc::cpu_set_t = unsafe { MaybeUninit::zeroed().assume_init() };
+            //         unsafe { libc::CPU_ZERO(&mut cpu_set) };
+            //         unsafe { libc::CPU_SET(thread_index as usize, &mut cpu_set) };
+            //
+            //         unsafe { libc::sched_setaffinity(tid as i32, core::mem::size_of::<libc::cpu_set_t>(), &cpu_set) };
+            //     }
 
             // Start fuzzing
             let _ = fuzz(state_copy).expect("Thread failed");

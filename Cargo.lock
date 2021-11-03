@@ -53,12 +53,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 
 [[package]]
-name = "bitset"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd450435a044ff3a192c9b0063e9f612ee3e2b2e23388332bc3aada13e3f7f6b"
-
-[[package]]
 name = "bitstream-io"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -280,7 +274,6 @@ dependencies = [
 name = "flash-fuzz"
 version = "0.1.0"
 dependencies = [
- "bitset",
  "dirs-next",
  "env_logger",
  "lazy_static",
