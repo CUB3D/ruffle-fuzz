@@ -6,23 +6,25 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-subprocess = "0.2.8"
+subprocess = "0.2.9"
 swf = { path = "./swf" }
 #regex = "1.5.4"
-rand = {version = "0.8.4", features = ["small_rng"]}
+rand = {version = "0.8.5", features = ["small_rng"]}
 lazy_static = "1.4.0"
 md5 = "0.7.0"
 dirs-next = "2.0.0"
-thiserror = "1.0.30"
-tokio = {version = "1.13.0", features = ["macros", "fs", "rt"]}
-ptrace = { path = "./ptrace", features = [] }
+thiserror = "1.0.31"
+tokio = {version = "1.19.2", features = ["macros", "fs", "rt"]}
+ptrace = { path = "./ptrace", features = ["breakpoints"] }
 ruffle_core = { path = "./ruffle/core"}
 
-log = "0.4.14"
+log = "0.4.17"
 env_logger = "0.9.0"
-tracing = { version = "0.1.29", features = ["log"] }
+tracing = { version = "0.1.35", features = ["log"] }
 
-libc = "0.2.106"
+libc = "0.2.126"
+
+anyhow = "1.0.58"
 
 [features]
 default = ["flash_file_injection"]
