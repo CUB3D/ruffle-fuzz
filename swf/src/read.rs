@@ -1,10 +1,3 @@
-#![allow(
-    renamed_and_removed_lints,
-    clippy::unknown_clippy_lints,
-    clippy::inconsistent_digit_grouping,
-    clippy::unreadable_literal
-)]
-
 use crate::extensions::ReadSwfExt;
 use crate::{
     error::{Error, Result},
@@ -16,7 +9,7 @@ use bitstream_io::BitRead;
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::io::{self, Read};
 
-/// Parse a decompressed SWF and return a `Vec` of tags.
+/// Parse a decompressed SWF.
 ///
 /// # Example
 /// ```
@@ -147,7 +140,6 @@ pub fn decompress_swf<'a, R: Read + 'a>(mut input: R) -> Result<SwfBuf> {
 }
 
 #[cfg(feature = "flate2")]
-#[allow(clippy::unnecessary_wraps)]
 fn make_zlib_reader<'a, R: Read + 'a>(input: R) -> Result<Box<dyn Read + 'a>> {
     use flate2::read::ZlibDecoder;
     Ok(Box::new(ZlibDecoder::new(input)))
@@ -220,14 +212,16 @@ fn make_lzma_reader<'a, R: Read + 'a>(
     ))
 }
 
-pub struct BitReader<'a, 'b> {
+struct BitReader<'a, 'b> {
     bits: bitstream_io::BitReader<&'b mut &'a [u8], bitstream_io::BigEndian>,
 }
 
 impl<'a, 'b> BitReader<'a, 'b> {
     #[inline]
-    fn byte_align(&mut self) {
-        self.bits.byte_align();
+    fn new(data: &'b mut &'a [u8]) -> Self {
+        Self {
+            bits: bitstream_io::BitReader::new(data),
+        }
     }
 
     #[inline]
@@ -271,7 +265,7 @@ impl<'a, 'b> BitReader<'a, 'b> {
 
     #[inline]
     fn reader(&mut self) -> &mut &'a [u8] {
-        self.byte_align();
+        self.bits.byte_align();
         self.bits.reader().unwrap()
     }
 }
@@ -295,8 +289,8 @@ impl<'a> ReadSwfExt<'a> for Reader<'a> {
 
 impl<'a> Reader<'a> {
     #[inline]
-    pub const fn new(input: &'a [u8], version: u8) -> Reader<'a> {
-        Reader { input, version }
+    pub const fn new(input: &'a [u8], version: u8) -> Self {
+        Self { input, version }
     }
 
     /// Returns the suggested string encoding for this SWF.
@@ -328,9 +322,17 @@ impl<'a> Reader<'a> {
     }
 
     fn bits<'b>(&'b mut self) -> BitReader<'a, 'b> {
-        BitReader {
-            bits: bitstream_io::BitReader::new(&mut self.input),
-        }
+        BitReader::new(&mut self.input)
+    }
+
+    #[inline]
+    fn read_fixed8(&mut self) -> Result<Fixed8> {
+        Ok(Fixed8::from_bits(self.read_i16()?))
+    }
+
+    #[inline]
+    fn read_fixed16(&mut self) -> Result<Fixed16> {
+        Ok(Fixed16::from_bits(self.read_i32()?))
     }
 
     /// Reads the next SWF tag from the stream.
@@ -363,10 +365,7 @@ impl<'a> Reader<'a> {
             TagCode::ShowFrame => Tag::ShowFrame,
             TagCode::CsmTextSettings => Tag::CsmTextSettings(tag_reader.read_csm_text_settings()?),
             TagCode::DefineBinaryData => {
-                let id = tag_reader.read_u16()?;
-                tag_reader.read_u32()?; // Reserved
-                let data = tag_reader.read_slice_to_end();
-                Tag::DefineBinaryData { id, data }
+                Tag::DefineBinaryData(tag_reader.read_define_binary_data()?)
             }
             TagCode::DefineBits => {
                 let id = tag_reader.read_u16()?;
@@ -378,8 +377,12 @@ impl<'a> Reader<'a> {
                 let jpeg_data = tag_reader.read_slice_to_end();
                 Tag::DefineBitsJpeg2 { id, jpeg_data }
             }
-            TagCode::DefineBitsJpeg3 => tag_reader.read_define_bits_jpeg_3(3)?,
-            TagCode::DefineBitsJpeg4 => tag_reader.read_define_bits_jpeg_3(4)?,
+            TagCode::DefineBitsJpeg3 => {
+                Tag::DefineBitsJpeg3(tag_reader.read_define_bits_jpeg_3(3)?)
+            }
+            TagCode::DefineBitsJpeg4 => {
+                Tag::DefineBitsJpeg3(tag_reader.read_define_bits_jpeg_3(4)?)
+            }
             TagCode::DefineButton => {
                 Tag::DefineButton(Box::new(tag_reader.read_define_button_1()?))
             }
@@ -400,8 +403,12 @@ impl<'a> Reader<'a> {
             TagCode::DefineFont3 => Tag::DefineFont2(Box::new(tag_reader.read_define_font_2(3)?)),
             TagCode::DefineFont4 => Tag::DefineFont4(tag_reader.read_define_font_4()?),
             TagCode::DefineFontAlignZones => tag_reader.read_define_font_align_zones()?,
-            TagCode::DefineFontInfo => tag_reader.read_define_font_info(1)?,
-            TagCode::DefineFontInfo2 => tag_reader.read_define_font_info(2)?,
+            TagCode::DefineFontInfo => {
+                Tag::DefineFontInfo(Box::new(tag_reader.read_define_font_info(1)?))
+            }
+            TagCode::DefineFontInfo2 => {
+                Tag::DefineFontInfo(Box::new(tag_reader.read_define_font_info(2)?))
+            }
             TagCode::DefineFontName => tag_reader.read_define_font_name()?,
             TagCode::DefineMorphShape => {
                 Tag::DefineMorphShape(Box::new(tag_reader.read_define_morph_shape(1)?))
@@ -416,7 +423,9 @@ impl<'a> Reader<'a> {
             TagCode::DefineSound => Tag::DefineSound(Box::new(tag_reader.read_define_sound()?)),
             TagCode::DefineText => Tag::DefineText(Box::new(tag_reader.read_define_text(1)?)),
             TagCode::DefineText2 => Tag::DefineText(Box::new(tag_reader.read_define_text(2)?)),
-            TagCode::DefineVideoStream => tag_reader.read_define_video_stream()?,
+            TagCode::DefineVideoStream => {
+                Tag::DefineVideoStream(tag_reader.read_define_video_stream()?)
+            }
             TagCode::EnableTelemetry => {
                 tag_reader.read_u16()?; // Reserved
                 let password_hash = if length > 2 {
@@ -566,7 +575,7 @@ impl<'a> Reader<'a> {
 
             TagCode::FrameLabel => Tag::FrameLabel(tag_reader.read_frame_label(length)?),
 
-            TagCode::DefineSprite => tag_reader.read_define_sprite()?,
+            TagCode::DefineSprite => Tag::DefineSprite(tag_reader.read_define_sprite()?),
 
             TagCode::PlaceObject => {
                 Tag::PlaceObject(Box::new(tag_reader.read_place_object(length)?))
@@ -585,7 +594,7 @@ impl<'a> Reader<'a> {
 
             TagCode::RemoveObject2 => Tag::RemoveObject(tag_reader.read_remove_object_2()?),
 
-            TagCode::VideoFrame => tag_reader.read_video_frame()?,
+            TagCode::VideoFrame => Tag::VideoFrame(tag_reader.read_video_frame()?),
             TagCode::ProductInfo => Tag::ProductInfo(tag_reader.read_product_info()?),
             TagCode::NameCharacter => Tag::NameCharacter(tag_reader.read_name_character()?),
         };
@@ -795,8 +804,7 @@ impl<'a> Reader<'a> {
         // to the characters in a button in sequence.
 
         // We don't know how many color transforms this tag will contain, so read it into a buffer.
-        let version = self.version;
-        let mut reader = Reader::new(self.read_slice(tag_length)?, version);
+        let mut reader = Reader::new(self.read_slice(tag_length)?, self.version);
 
         let id = reader.read_character_id()?;
         let mut color_transforms = Vec::new();
@@ -863,6 +871,7 @@ impl<'a> Reader<'a> {
         let mut filters = vec![];
         if (flags & 0b1_0000) != 0 {
             let num_filters = self.read_u8()?;
+            filters.reserve(num_filters as usize);
             for _ in 0..num_filters {
                 filters.push(self.read_filter()?);
             }
@@ -965,28 +974,25 @@ impl<'a> Reader<'a> {
         let id = self.read_u16()?;
         let num_glyphs = self.read_u16()? / 2;
 
-        let mut glyphs = vec![];
-        if num_glyphs > 0 {
-            for _ in 0..(num_glyphs - 1) {
-                self.read_u16()?;
-            }
+        for _ in 0..num_glyphs.saturating_sub(1) {
+            self.read_u16()?;
+        }
 
-            let swf_version = self.version;
-            for _ in 0..num_glyphs {
-                let mut glyph = vec![];
-                let num_bits = self.read_u8()?;
-                let mut shape_context = ShapeContext {
-                    swf_version,
-                    shape_version: 1,
-                    num_fill_bits: num_bits >> 4,
-                    num_line_bits: num_bits & 0b1111,
-                };
-                let mut bits = self.bits();
-                while let Some(record) = Self::read_shape_record(&mut bits, &mut shape_context)? {
-                    glyph.push(record);
-                }
-                glyphs.push(glyph);
+        let mut glyphs = Vec::with_capacity(num_glyphs as usize);
+        for _ in 0..num_glyphs {
+            let mut glyph = vec![];
+            let num_bits = self.read_u8()?;
+            let mut shape_context = ShapeContext {
+                swf_version: self.version,
+                shape_version: 1,
+                num_fill_bits: num_bits >> 4,
+                num_line_bits: num_bits & 0b1111,
+            };
+            let mut bits = self.bits();
+            while let Some(record) = Self::read_shape_record(&mut bits, &mut shape_context)? {
+                glyph.push(record);
             }
+            glyphs.push(glyph);
         }
 
         Ok(FontV1 { id, glyphs })
@@ -994,34 +1000,22 @@ impl<'a> Reader<'a> {
 
     pub fn read_define_font_2(&mut self, version: u8) -> Result<Font<'a>> {
         let id = self.read_character_id()?;
-
-        let flags = self.read_u8()?;
-        let has_layout = flags & 0b10000000 != 0;
-        let is_shift_jis = flags & 0b1000000 != 0;
-        let is_small_text = flags & 0b100000 != 0;
-        let is_ansi = flags & 0b10000 != 0;
-        let has_wide_offsets = flags & 0b1000 != 0;
-        let has_wide_codes = flags & 0b100 != 0;
-        let is_italic = flags & 0b10 != 0;
-        let is_bold = flags & 0b1 != 0;
-
+        let flags = FontFlag::from_bits_truncate(self.read_u8()?);
         let language = self.read_language()?;
-        let name_len = self.read_u8()?;
         // SWF19 states that the font name should not have a terminating null byte,
         // but it often does (depends on Flash IDE version?)
-        let name = self.read_str_with_len(name_len.into())?;
+        let name = self.read_str_with_len()?;
 
         let num_glyphs = self.read_u16()? as usize;
-        let mut glyphs = Vec::with_capacity(num_glyphs);
-        glyphs.resize(
-            num_glyphs,
+        let mut glyphs = vec![
             Glyph {
                 shape_records: vec![],
                 code: 0,
-                advance: None,
+                advance: 0,
                 bounds: None,
-            },
-        );
+            };
+            num_glyphs
+        ];
 
         // SWF19 p. 164 doesn't make it super clear: If there are no glyphs,
         // then the following tables are omitted. But the table offset values
@@ -1029,48 +1023,79 @@ impl<'a> Reader<'a> {
         if num_glyphs == 0 {
             // Try to read the CodeTableOffset. It may or may not be present,
             // so just dump any error.
-            if has_wide_offsets {
+            if flags.contains(FontFlag::HAS_WIDE_OFFSETS) {
                 let _ = self.read_u32();
             } else {
                 let _ = self.read_u16();
             }
         } else {
+            let offsets_ref = self.get_ref();
+
             // OffsetTable
-            // We are throwing these away.
-            for _ in &mut glyphs {
-                if has_wide_offsets {
-                    self.read_u32()?;
-                } else {
-                    self.read_u16()?;
-                };
-            }
+            let offsets: Result<Vec<_>> = (0..num_glyphs)
+                .map(|_| {
+                    if flags.contains(FontFlag::HAS_WIDE_OFFSETS) {
+                        self.read_u32()
+                    } else {
+                        self.read_u16().map(u32::from)
+                    }
+                })
+                .collect();
+            let offsets = offsets?;
 
             // CodeTableOffset
-            if has_wide_offsets {
-                self.read_u32()?;
+            let code_table_offset = if flags.contains(FontFlag::HAS_WIDE_OFFSETS) {
+                self.read_u32()?
             } else {
-                self.read_u16()?;
-            }
+                self.read_u16()?.into()
+            };
 
-            // ShapeTable
-            let swf_version = self.version;
-            for glyph in &mut glyphs {
+            // GlyphShapeTable
+            for (i, glyph) in glyphs.iter_mut().enumerate() {
+                // The glyph shapes are assumed to be positioned per the offset table.
+                // Panic on debug builds if this assumption is wrong, maybe we need to
+                // seek into these offsets instead?
+                debug_assert_eq!(self.pos(offsets_ref), offsets[i] as usize);
+
+                // The glyph shapes must not overlap. Avoid exceeding to the next one.
+                // TODO: What happens on decreasing offsets?
+                let available_bytes = if i < num_glyphs as usize - 1 {
+                    offsets[i + 1] - offsets[i]
+                } else {
+                    code_table_offset - offsets[i]
+                };
+
+                if available_bytes == 0 {
+                    continue;
+                }
+
                 let num_bits = self.read_u8()?;
                 let mut shape_context = ShapeContext {
-                    swf_version,
+                    swf_version: self.version,
                     shape_version: 1,
                     num_fill_bits: num_bits >> 4,
                     num_line_bits: num_bits & 0b1111,
                 };
+
+                if available_bytes == 1 {
+                    continue;
+                }
+
+                // TODO: Avoid reading more than `available_bytes - 1`?
                 let mut bits = self.bits();
                 while let Some(record) = Self::read_shape_record(&mut bits, &mut shape_context)? {
                     glyph.shape_records.push(record);
                 }
             }
 
+            // The code table is assumed to be positioned right after the glyph shapes.
+            // Panic on debug builds if this assumption is wrong, maybe we need to seek
+            // into the code table offset instead?
+            debug_assert_eq!(self.pos(offsets_ref), code_table_offset as usize);
+
             // CodeTable
             for glyph in &mut glyphs {
-                glyph.code = if has_wide_codes {
+                glyph.code = if flags.contains(FontFlag::HAS_WIDE_CODES) {
                     self.read_u16()?
                 } else {
                     self.read_u8()?.into()
@@ -1079,24 +1104,34 @@ impl<'a> Reader<'a> {
         }
 
         // TODO: Is it possible to have a layout when there are no glyphs?
-        let layout = if has_layout {
+        let layout = if flags.contains(FontFlag::HAS_LAYOUT) {
             let ascent = self.read_u16()?;
             let descent = self.read_u16()?;
             let leading = self.read_i16()?;
 
             for glyph in &mut glyphs {
-                glyph.advance = Some(self.read_i16()?);
+                glyph.advance = self.read_i16()?;
             }
 
-            for glyph in &mut glyphs {
-                glyph.bounds = Some(self.read_rectangle()?);
+            // Some older SWFs end the tag here, as this data isn't used until v7.
+            if !self.as_slice().is_empty() {
+                for glyph in &mut glyphs {
+                    glyph.bounds = Some(self.read_rectangle()?);
+                }
             }
 
-            let num_kerning_records = self.read_u16()? as usize;
-            let mut kerning_records = Vec::with_capacity(num_kerning_records);
-            for _ in 0..num_kerning_records {
-                kerning_records.push(self.read_kerning_record(has_wide_codes)?);
-            }
+            let kerning_records = if !self.as_slice().is_empty() {
+                let num_kerning_records = self.read_u16()? as usize;
+
+                let mut kerning_records = Vec::with_capacity(num_kerning_records);
+                for _ in 0..num_kerning_records {
+                    kerning_records
+                        .push(self.read_kerning_record(flags.contains(FontFlag::HAS_WIDE_CODES))?);
+                }
+                kerning_records
+            } else {
+                vec![]
+            };
 
             Some(FontLayout {
                 ascent,
@@ -1115,11 +1150,7 @@ impl<'a> Reader<'a> {
             language,
             layout,
             glyphs,
-            is_small_text,
-            is_shift_jis,
-            is_ansi,
-            is_bold,
-            is_italic,
+            flags,
         })
     }
 
@@ -1185,14 +1216,10 @@ impl<'a> Reader<'a> {
         Ok(zone)
     }
 
-    fn read_define_font_info(&mut self, version: u8) -> Result<Tag<'a>> {
+    fn read_define_font_info(&mut self, version: u8) -> Result<FontInfo<'a>> {
         let id = self.read_u16()?;
-
-        let font_name_len = self.read_u8()?;
-        let font_name = self.read_str_with_len(font_name_len.into())?;
-
-        let flags = self.read_u8()?;
-        let use_wide_codes = flags & 0b1 != 0; // TODO(Herschel): Warn if false for version 2.
+        let name = self.read_str_with_len()?;
+        let flags = FontInfoFlag::from_bits_truncate(self.read_u8()?);
 
         let language = if version >= 2 {
             self.read_language()?
@@ -1201,29 +1228,26 @@ impl<'a> Reader<'a> {
         };
 
         let mut code_table = vec![];
-        if use_wide_codes {
+        if flags.contains(FontInfoFlag::HAS_WIDE_CODES) {
             while let Ok(code) = self.read_u16() {
                 code_table.push(code);
             }
         } else {
+            // TODO(Herschel): Warn for version 2.
             while let Ok(code) = self.read_u8() {
                 code_table.push(code.into());
             }
         }
 
         // SWF19 has ANSI and Shift-JIS backwards?
-        Ok(Tag::DefineFontInfo(Box::new(FontInfo {
+        Ok(FontInfo {
             id,
             version,
-            name: font_name,
-            is_small_text: flags & 0b100000 != 0,
-            is_ansi: flags & 0b10000 != 0,
-            is_shift_jis: flags & 0b1000 != 0,
-            is_italic: flags & 0b100 != 0,
-            is_bold: flags & 0b10 != 0,
+            name,
+            flags,
             language,
             code_table,
-        })))
+        })
     }
 
     fn read_define_font_name(&mut self) -> Result<Tag<'a>> {
@@ -1297,7 +1321,6 @@ impl<'a> Reader<'a> {
         while let Some(record) = Self::read_shape_record(&mut bits, &mut shape_context)? {
             start_shape.push(record);
         }
-        drop(bits);
 
         let mut end_shape = Vec::new();
         self.read_u8()?; // NumFillBits and NumLineBits are written as 0 for the end shape.
@@ -1341,77 +1364,53 @@ impl<'a> Reader<'a> {
             let end_color = self.read_rgba()?;
 
             Ok((
-                LineStyle::new_v1(start_width, start_color),
-                LineStyle::new_v1(end_width, end_color),
+                LineStyle::new()
+                    .with_width(start_width)
+                    .with_color(start_color),
+                LineStyle::new().with_width(end_width).with_color(end_color),
             ))
         } else {
             // MorphLineStyle2 in DefineMorphShape2.
-            let flags0 = self.read_u8()?;
-            let flags1 = self.read_u8()?;
-            let start_cap = LineCapStyle::from_u8(flags0 >> 6)
-                .ok_or_else(|| Error::invalid_data("Invalid line cap type."))?;
-            let join_style_id = (flags0 >> 4) & 0b11;
-            let has_fill = (flags0 & 0b1000) != 0;
-            let allow_scale_x = (flags0 & 0b100) == 0;
-            let allow_scale_y = (flags0 & 0b10) == 0;
-            let is_pixel_hinted = (flags0 & 0b1) != 0;
-            let allow_close = (flags1 & 0b100) == 0;
-            let end_cap = LineCapStyle::from_u8(flags1 & 0b11)
-                .ok_or_else(|| Error::invalid_data("Invalid line cap type."))?;
-            let join_style = match join_style_id {
-                0 => LineJoinStyle::Round,
-                1 => LineJoinStyle::Bevel,
-                2 => LineJoinStyle::Miter(self.read_fixed8()?),
-                _ => return Err(Error::invalid_data("Invalid line cap type.")),
+            let mut flags = LineStyleFlag::from_bits_truncate(self.read_u16()?);
+            // Verify valid cap and join styles.
+            if flags.contains(LineStyleFlag::JOIN_STYLE) {
+                log::warn!("Invalid line join style");
+                flags -= LineStyleFlag::JOIN_STYLE;
+            }
+            if flags.contains(LineStyleFlag::START_CAP_STYLE) {
+                log::warn!("Invalid line start cap style");
+                flags -= LineStyleFlag::START_CAP_STYLE;
+            }
+            if flags.contains(LineStyleFlag::END_CAP_STYLE) {
+                log::warn!("Invalid line end cap style");
+                flags -= LineStyleFlag::END_CAP_STYLE;
+            }
+            let miter_limit = if flags & LineStyleFlag::JOIN_STYLE == LineStyleFlag::MITER {
+                self.read_fixed8()?
+            } else {
+                Fixed8::ZERO
             };
-            let (start_color, end_color) = if !has_fill {
-                (self.read_rgba()?, self.read_rgba()?)
+            let (start_fill_style, end_fill_style) = if flags.contains(LineStyleFlag::HAS_FILL) {
+                let (start, end) = self.read_morph_fill_style()?;
+                (start, end)
             } else {
                 (
-                    Color {
-                        r: 0,
-                        g: 0,
-                        b: 0,
-                        a: 0,
-                    },
-                    Color {
-                        r: 0,
-                        g: 0,
-                        b: 0,
-                        a: 0,
-                    },
+                    FillStyle::Color(self.read_rgba()?),
+                    FillStyle::Color(self.read_rgba()?),
                 )
-            };
-            let (start_fill_style, end_fill_style) = if has_fill {
-                let (start, end) = self.read_morph_fill_style()?;
-                (Some(start), Some(end))
-            } else {
-                (None, None)
             };
             Ok((
                 LineStyle {
                     width: start_width,
-                    color: start_color,
-                    start_cap,
-                    end_cap,
-                    join_style,
-                    allow_scale_x,
-                    allow_scale_y,
-                    is_pixel_hinted,
-                    allow_close,
                     fill_style: start_fill_style,
+                    flags,
+                    miter_limit,
                 },
                 LineStyle {
                     width: end_width,
-                    color: end_color,
-                    start_cap,
-                    end_cap,
-                    join_style,
-                    allow_scale_x,
-                    allow_scale_y,
-                    is_pixel_hinted,
-                    allow_close,
                     fill_style: end_fill_style,
+                    flags,
+                    miter_limit,
                 },
             ))
         }
@@ -1660,63 +1659,47 @@ impl<'a> Reader<'a> {
     }
 
     fn read_line_style(&mut self, shape_version: u8) -> Result<LineStyle> {
+        let width = Twips::new(self.read_u16()?);
         if shape_version < 4 {
             // LineStyle1
-            Ok(LineStyle::new_v1(
-                Twips::new(self.read_u16()?),
-                if shape_version >= 3 {
-                    self.read_rgba()?
-                } else {
-                    self.read_rgb()?
-                },
-            ))
-        } else {
-            // LineStyle2 in DefineShape4
-            let width = Twips::new(self.read_u16()?);
-            let flags0 = self.read_u8()?;
-            let flags1 = self.read_u8()?;
-            let start_cap = LineCapStyle::from_u8(flags0 >> 6)
-                .ok_or_else(|| Error::invalid_data("Invalid line cap type."))?;
-            let join_style_id = (flags0 >> 4) & 0b11;
-            let has_fill = (flags0 & 0b1000) != 0;
-            let allow_scale_x = (flags0 & 0b100) == 0;
-            let allow_scale_y = (flags0 & 0b10) == 0;
-            let is_pixel_hinted = (flags0 & 0b1) != 0;
-            let allow_close = (flags1 & 0b100) == 0;
-            let end_cap = LineCapStyle::from_u8(flags1 & 0b11)
-                .ok_or_else(|| Error::invalid_data("Invalid line cap type."))?;
-            let join_style = match join_style_id {
-                0 => LineJoinStyle::Round,
-                1 => LineJoinStyle::Bevel,
-                2 => LineJoinStyle::Miter(self.read_fixed8()?),
-                _ => return Err(Error::invalid_data("Invalid line cap type.")),
-            };
-            let color = if !has_fill {
+            let color = if shape_version >= 3 {
                 self.read_rgba()?
             } else {
-                Color {
-                    r: 0,
-                    g: 0,
-                    b: 0,
-                    a: 0,
-                }
+                self.read_rgb()?
             };
-            let fill_style = if has_fill {
-                Some(self.read_fill_style(shape_version)?)
+            Ok(LineStyle::new().with_width(width).with_color(color))
+        } else {
+            // LineStyle2 in DefineShape4
+            let mut flags = LineStyleFlag::from_bits_truncate(self.read_u16()?);
+            // Verify valid cap and join styles.
+            if flags.contains(LineStyleFlag::JOIN_STYLE) {
+                log::warn!("Invalid line join style");
+                flags -= LineStyleFlag::JOIN_STYLE;
+            }
+            if flags.contains(LineStyleFlag::START_CAP_STYLE) {
+                log::warn!("Invalid line start cap style");
+                flags -= LineStyleFlag::START_CAP_STYLE;
+            }
+            if flags.contains(LineStyleFlag::END_CAP_STYLE) {
+                log::warn!("Invalid line end cap style");
+                flags -= LineStyleFlag::END_CAP_STYLE;
+            }
+            let miter_limit = if flags & LineStyleFlag::JOIN_STYLE == LineStyleFlag::MITER {
+                self.read_fixed8()?
             } else {
-                None
+                Fixed8::ZERO
+            };
+
+            let fill_style = if flags.contains(LineStyleFlag::HAS_FILL) {
+                self.read_fill_style(shape_version)?
+            } else {
+                FillStyle::Color(self.read_rgba()?)
             };
             Ok(LineStyle {
                 width,
-                color,
-                start_cap,
-                end_cap,
-                join_style,
                 fill_style,
-                allow_scale_x,
-                allow_scale_y,
-                is_pixel_hinted,
-                allow_close,
+                flags,
+                miter_limit,
             })
         }
     }
@@ -1819,7 +1802,6 @@ impl<'a> Reader<'a> {
                 // but SWFs in the wild exist with them in DefineShape1 (generated by third party tools),
                 // and these run correctly in the Flash Player.
                 if (flags & 0b10000) != 0 {
-                    bits.byte_align();
                     let mut reader = Reader::new(bits.reader(), context.swf_version);
                     let (new_styles, num_fill_bits, num_line_bits) =
                         reader.read_shape_styles(context.shape_version)?;
@@ -1828,7 +1810,7 @@ impl<'a> Reader<'a> {
                     new_style.new_styles = Some(new_styles);
                     *bits.reader() = reader.input;
                 }
-                Some(ShapeRecord::StyleChange(new_style))
+                Some(ShapeRecord::StyleChange(Box::new(new_style)))
             } else {
                 None
             }
@@ -1836,12 +1818,12 @@ impl<'a> Reader<'a> {
         Ok(shape_record)
     }
 
-    pub fn read_define_sprite(&mut self) -> Result<Tag<'a>> {
-        Ok(Tag::DefineSprite(Sprite {
+    pub fn read_define_sprite(&mut self) -> Result<Sprite<'a>> {
+        Ok(Sprite {
             id: self.read_u16()?,
             num_frames: self.read_u16()?,
             tags: self.read_tag_list()?,
-        }))
+        })
     }
 
     pub fn read_file_attributes(&mut self) -> Result<FileAttributes> {
@@ -1886,7 +1868,7 @@ impl<'a> Reader<'a> {
             background_color: None,
             blend_mode: None,
             clip_actions: None,
-            is_image: false,
+            has_image: false,
             is_bitmap_cached: None,
             is_visible: None,
             amf_data: None,
@@ -1898,63 +1880,70 @@ impl<'a> Reader<'a> {
         place_object_version: u8,
     ) -> Result<PlaceObject<'a>> {
         let flags = if place_object_version >= 3 {
-            self.read_u16()?
+            PlaceFlag::from_bits_truncate(self.read_u16()?)
         } else {
-            self.read_u8()?.into()
+            PlaceFlag::from_bits_truncate(self.read_u8()?.into())
         };
 
         let depth = self.read_u16()?;
 
         // PlaceObject3
-        let is_image = (flags & 0b10000_00000000) != 0;
         // SWF19 p.40 incorrectly says class name if (HasClassNameFlag || (HasImage && HasCharacterID))
         // I think this should be if (HasClassNameFlag || (HasImage && !HasCharacterID)),
         // you use the class name only if a character ID isn't present.
         // But what is the case where we'd have an image without either HasCharacterID or HasClassName set?
-        let has_character_id = (flags & 0b10) != 0;
-        let has_class_name = (flags & 0b1000_00000000) != 0 || (is_image && !has_character_id);
+        let has_image = flags.contains(PlaceFlag::HAS_IMAGE);
+        let has_character_id = flags.contains(PlaceFlag::HAS_CHARACTER);
+        let has_class_name =
+            flags.contains(PlaceFlag::HAS_CLASS_NAME) || (has_image && !has_character_id);
         let class_name = if has_class_name {
             Some(self.read_str()?)
         } else {
             None
         };
 
-        let action = match flags & 0b11 {
-            0b01 => PlaceObjectAction::Modify,
-            0b10 => PlaceObjectAction::Place(self.read_u16()?),
-            0b11 => PlaceObjectAction::Replace(self.read_u16()?),
+        let action = match (flags.contains(PlaceFlag::MOVE), has_character_id) {
+            (true, false) => PlaceObjectAction::Modify,
+            (false, true) => {
+                let id = self.read_u16()?;
+                PlaceObjectAction::Place(id)
+            }
+            (true, true) => {
+                let id = self.read_u16()?;
+                PlaceObjectAction::Replace(id)
+            }
             _ => return Err(Error::invalid_data("Invalid PlaceObject type")),
         };
-        let matrix = if (flags & 0b100) != 0 {
+        let matrix = if flags.contains(PlaceFlag::HAS_MATRIX) {
             Some(self.read_matrix()?)
         } else {
             None
         };
-        let color_transform = if (flags & 0b1000) != 0 {
+        let color_transform = if flags.contains(PlaceFlag::HAS_COLOR_TRANSFORM) {
             Some(self.read_color_transform()?)
         } else {
             None
         };
-        let ratio = if (flags & 0b1_0000) != 0 {
+        let ratio = if flags.contains(PlaceFlag::HAS_RATIO) {
             Some(self.read_u16()?)
         } else {
             None
         };
-        let name = if (flags & 0b10_0000) != 0 {
+        let name = if flags.contains(PlaceFlag::HAS_NAME) {
             Some(self.read_str()?)
         } else {
             None
         };
-        let clip_depth = if (flags & 0b100_0000) != 0 {
+        let clip_depth = if flags.contains(PlaceFlag::HAS_CLIP_DEPTH) {
             Some(self.read_u16()?)
         } else {
             None
         };
 
         // PlaceObject3
-        let filters = if (flags & 0b1_00000000) != 0 {
-            let mut filters = vec![];
+        let filters = if flags.contains(PlaceFlag::HAS_FILTER_LIST) {
             let num_filters = self.read_u8()?;
+            let mut filters = Vec::with_capacity(num_filters as usize);
             for _ in 0..num_filters {
                 filters.push(self.read_filter()?);
             }
@@ -1962,37 +1951,45 @@ impl<'a> Reader<'a> {
         } else {
             None
         };
-        let blend_mode = if (flags & 0b10_00000000) != 0 {
+        let blend_mode = if flags.contains(PlaceFlag::HAS_BLEND_MODE) {
             Some(self.read_blend_mode()?)
         } else {
             None
         };
-        let is_bitmap_cached = if (flags & 0b100_00000000) != 0 {
+        let is_bitmap_cached = if flags.contains(PlaceFlag::HAS_CACHE_AS_BITMAP) {
+            // Some incorrect SWFs appear to end the tag here, without
+            // the expected 'u8'.
+            if self.as_slice().is_empty() {
+                Some(true)
+            } else {
+                Some(self.read_u8()? != 0)
+            }
+        } else {
+            None
+        };
+        let is_visible = if flags.contains(PlaceFlag::HAS_VISIBLE) {
             Some(self.read_u8()? != 0)
         } else {
             None
         };
-        let is_visible = if (flags & 0b100000_00000000) != 0 {
-            Some(self.read_u8()? != 0)
-        } else {
-            None
-        };
-        let background_color = if (flags & 0b1000000_00000000) != 0 {
+        let background_color = if flags.contains(PlaceFlag::OPAQUE_BACKGROUND) {
             Some(self.read_rgba()?)
         } else {
             None
         };
-
-        let clip_actions = if (flags & 0b1000_0000) != 0 {
+        let clip_actions = if flags.contains(PlaceFlag::HAS_CLIP_ACTIONS) {
             Some(self.read_clip_actions()?)
         } else {
             None
         };
+
+        // PlaceObject4
         let amf_data = if place_object_version >= 4 {
             Some(self.read_slice_to_end())
         } else {
             None
         };
+
         Ok(PlaceObject {
             version: place_object_version,
             action,
@@ -2003,7 +2000,7 @@ impl<'a> Reader<'a> {
             name,
             clip_depth,
             clip_actions,
-            is_image,
+            has_image,
             is_bitmap_cached,
             is_visible,
             class_name,
@@ -2034,7 +2031,7 @@ impl<'a> Reader<'a> {
 
     fn read_clip_actions(&mut self) -> Result<Vec<ClipAction<'a>>> {
         self.read_u16()?; // Must be 0
-        self.read_clip_event_flags()?; // All event flags
+        self.read_clip_event_flags(); // All event flags
         let mut clip_actions = vec![];
         while let Some(clip_action) = self.read_clip_action()? {
             clip_actions.push(clip_action);
@@ -2043,7 +2040,7 @@ impl<'a> Reader<'a> {
     }
 
     fn read_clip_action(&mut self) -> Result<Option<ClipAction<'a>>> {
-        let events = self.read_clip_event_flags()?;
+        let events = self.read_clip_event_flags();
         if events.is_empty() {
             Ok(None)
         } else {
@@ -2065,51 +2062,21 @@ impl<'a> Reader<'a> {
         }
     }
 
-    fn read_clip_event_flags(&mut self) -> Result<ClipEventFlag> {
-        // TODO: Switch to a bitset.
-        let mut event_list = ClipEventFlag::empty();
-
-        let flags = self.read_u8()?;
-        event_list.set(ClipEventFlag::KEY_UP, flags & 0b1000_0000 != 0);
-        event_list.set(ClipEventFlag::KEY_DOWN, flags & 0b0100_0000 != 0);
-        event_list.set(ClipEventFlag::MOUSE_UP, flags & 0b0010_0000 != 0);
-        event_list.set(ClipEventFlag::MOUSE_DOWN, flags & 0b0001_0000 != 0);
-        event_list.set(ClipEventFlag::MOUSE_MOVE, flags & 0b0000_1000 != 0);
-        event_list.set(ClipEventFlag::UNLOAD, flags & 0b0000_0100 != 0);
-        event_list.set(ClipEventFlag::ENTER_FRAME, flags & 0b0000_0010 != 0);
-        event_list.set(ClipEventFlag::LOAD, flags & 0b0000_0001 != 0);
-
-        if self.version > 5 {
-            // There are SWFs in the wild with malformed final ClipActions that is only two bytes
-            // instead of four bytes (see #2899). Handle this gracefully to allow the tag to run.
-            // TODO: We may need a more general way to handle truncated tags, since this has
-            // occurred in a few different places.
-            // Allow for only two bytes in the clip action tag.
-            let flags = self.read_u8().unwrap_or_default();
-            let flags2 = self.read_u8().unwrap_or_default();
-            let _ = self.read_u8();
-            event_list.set(ClipEventFlag::DRAG_OVER, flags & 0b1000_0000 != 0);
-            event_list.set(ClipEventFlag::ROLL_OUT, flags & 0b0100_0000 != 0);
-            event_list.set(ClipEventFlag::ROLL_OVER, flags & 0b0010_0000 != 0);
-            event_list.set(ClipEventFlag::RELEASE_OUTSIDE, flags & 0b0001_0000 != 0);
-            event_list.set(ClipEventFlag::RELEASE, flags & 0b0000_1000 != 0);
-            event_list.set(ClipEventFlag::PRESS, flags & 0b0000_0100 != 0);
-            event_list.set(ClipEventFlag::INITIALIZE, flags & 0b0000_0010 != 0);
-            event_list.set(ClipEventFlag::DATA, flags & 0b0000_0001 != 0);
-
-            // Construct was only added in SWF7, but it's not version-gated;
-            // Construct events will still fire in SWF6 in a v7+ player. (#1424)
-            event_list.set(ClipEventFlag::CONSTRUCT, flags2 & 0b0000_0100 != 0);
-            event_list.set(ClipEventFlag::KEY_PRESS, flags2 & 0b0000_0010 != 0);
-            event_list.set(ClipEventFlag::DRAG_OUT, flags2 & 0b0000_0001 != 0);
+    fn read_clip_event_flags(&mut self) -> ClipEventFlag {
+        // There are SWFs in the wild with malformed final ClipActions that is only 2 bytes
+        // instead of 4 bytes (#2899). Handle this gracefully to allow the tag to run.
+        // TODO: We may need a more general way to handle truncated tags, since this has
+        // occurred in a few different places.
+        let bits = if self.version >= 6 {
+            self.read_u32().unwrap_or_default()
         } else {
             // SWF19 pp. 48-50: For SWFv5, the ClipEventFlags only had 2 bytes of flags,
             // with the 2nd byte reserved (all 0).
             // This was expanded to 4 bytes in SWFv6.
-            self.read_u8()?;
-        }
+            (self.read_u16().unwrap_or_default() as u8).into()
+        };
 
-        Ok(event_list)
+        ClipEventFlag::from_bits_truncate(bits)
     }
 
     pub fn read_filter(&mut self) -> Result<Filter> {
@@ -2346,6 +2313,13 @@ impl<'a> Reader<'a> {
         })
     }
 
+    pub fn read_define_binary_data(&mut self) -> Result<DefineBinaryData<'a>> {
+        let id = self.read_u16()?;
+        self.read_u32()?; // Reserved
+        let data = self.read_slice_to_end();
+        Ok(DefineBinaryData { id, data })
+    }
+
     pub fn read_define_text(&mut self, version: u8) -> Result<Text> {
         let id = self.read_character_id()?;
         let bounds = self.read_rectangle()?;
@@ -2501,7 +2475,7 @@ impl<'a> Reader<'a> {
         })
     }
 
-    pub fn read_define_video_stream(&mut self) -> Result<Tag<'a>> {
+    pub fn read_define_video_stream(&mut self) -> Result<DefineVideoStream> {
         let id = self.read_character_id()?;
         let num_frames = self.read_u16()?;
         let width = self.read_u16()?;
@@ -2510,7 +2484,7 @@ impl<'a> Reader<'a> {
         // TODO(Herschel): Check SWF version.
         let codec = VideoCodec::from_u8(self.read_u8()?)
             .ok_or_else(|| Error::invalid_data("Invalid video codec."))?;
-        Ok(Tag::DefineVideoStream(DefineVideoStream {
+        Ok(DefineVideoStream {
             id,
             num_frames,
             width,
@@ -2519,21 +2493,21 @@ impl<'a> Reader<'a> {
             codec,
             deblocking: VideoDeblocking::from_u8((flags >> 1) & 0b111)
                 .ok_or_else(|| Error::invalid_data("Invalid video deblocking value."))?,
-        }))
+        })
     }
 
-    pub fn read_video_frame(&mut self) -> Result<Tag<'a>> {
+    pub fn read_video_frame(&mut self) -> Result<VideoFrame<'a>> {
         let stream_id = self.read_character_id()?;
         let frame_num = self.read_u16()?;
         let data = self.read_slice_to_end();
-        Ok(Tag::VideoFrame(VideoFrame {
+        Ok(VideoFrame {
             stream_id,
             frame_num,
             data,
-        }))
+        })
     }
 
-    fn read_define_bits_jpeg_3(&mut self, version: u8) -> Result<Tag<'a>> {
+    fn read_define_bits_jpeg_3(&mut self, version: u8) -> Result<DefineBitsJpeg3<'a>> {
         let id = self.read_character_id()?;
         let data_size = self.read_u32()? as usize;
         let deblocking = if version >= 4 {
@@ -2543,13 +2517,13 @@ impl<'a> Reader<'a> {
         };
         let data = self.read_slice(data_size)?;
         let alpha_data = self.read_slice_to_end();
-        Ok(Tag::DefineBitsJpeg3(DefineBitsJpeg3 {
+        Ok(DefineBitsJpeg3 {
             id,
             version,
             deblocking,
             data,
             alpha_data,
-        }))
+        })
     }
 
     pub fn read_define_bits_lossless(&mut self, version: u8) -> Result<DefineBitsLossless<'a>> {
@@ -2621,12 +2595,11 @@ pub fn read_compression_type<R: Read>(mut input: R) -> Result<Compression> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unusual_byte_groupings)]
 pub mod tests {
     use super::*;
     use crate::tag_code::TagCode;
     use crate::test_data;
-    use std::fs::File;
-    use std::io::Read;
     use std::vec::Vec;
 
     fn reader(data: &[u8]) -> Reader<'_> {
@@ -2634,57 +2607,56 @@ pub mod tests {
         Reader::new(data, default_version)
     }
 
+    fn read_from_file(path: &str) -> SwfBuf {
+        let data = std::fs::read(path).unwrap();
+        decompress_swf(&data[..]).unwrap()
+    }
+
     pub fn read_tag_bytes_from_file_with_index(
         path: &str,
         tag_code: TagCode,
         mut index: usize,
     ) -> Vec<u8> {
-        let mut file = if let Ok(file) = File::open(path) {
-            file
-        } else {
-            panic!("Cannot open {}", path);
-        };
-        let mut data = Vec::new();
-        file.read_to_end(&mut data).unwrap();
+        let swf_buf = read_from_file(path);
 
         // Halfway parse the SWF file until we find the tag we're searching for.
-        let swf_buf = super::decompress_swf(&data[..]).unwrap();
-        let data = swf_buf.data;
-
-        let mut pos = 0;
-        let mut tag_header_length;
+        let mut reader = Reader::new(&swf_buf.data, swf_buf.header.version());
         loop {
-            let (swf_tag_code, length) = {
-                let mut tag_reader = Reader::new(&data[pos..], swf_buf.header.version());
-                let ret = tag_reader.read_tag_code_and_length().unwrap();
-                tag_header_length =
-                    tag_reader.get_ref().as_ptr() as usize - (pos + data.as_ptr() as usize);
-                ret
-            };
-            let tag_data = &data[pos..pos + length + tag_header_length];
-            pos += tag_header_length + length;
-            if swf_tag_code == 0 {
-                panic!("Tag not found");
-            } else if swf_tag_code == tag_code as u16 {
-                if index == 0 {
+            let tag_start = reader.get_ref();
+            let (swf_tag_code, tag_len) = reader.read_tag_code_and_length().unwrap();
+            let tag_end = &reader.get_ref()[tag_len..];
+
+            let full_tag_len = tag_end.as_ptr() as usize - tag_start.as_ptr() as usize;
+            let tag_data = &tag_start[..full_tag_len];
+
+            // Skip tag data.
+            *reader.get_mut() = tag_end;
+
+            match TagCode::from_u16(swf_tag_code) {
+                Some(swf_tag_code) if swf_tag_code == tag_code => {
+                    if index > 0 {
+                        index -= 1;
+                        continue;
+                    }
+
                     // Flash tends to export tags with the extended header even if the size
                     // would fit with the standard header.
                     // This screws up our tests, because swf-rs writes tags with the
                     // minimum header necessary.
                     // We want to easily write new tests by exporting SWFs from the Flash
                     // software, so rewrite with a standard header to match swf-rs output.
-                    let mut data = tag_data.to_vec();
-                    if length < 0b111111 && (data[0] & 0b111111) == 0b111111 {
-                        let mut tag_data = Vec::with_capacity(length + 2);
-                        tag_data.extend_from_slice(&data[0..2]);
-                        tag_data.extend_from_slice(&data[6..]);
-                        tag_data[0] = (data[0] & !0b111111) | (length as u8);
-                        data = tag_data;
-                    }
-                    return data;
-                } else {
-                    index -= 1;
+                    return if tag_len < 0b111111 && (tag_data[0] & 0b111111) == 0b111111 {
+                        let mut rewritten_tag_data = Vec::with_capacity(tag_len + 2);
+                        rewritten_tag_data.extend_from_slice(&tag_data[0..2]);
+                        rewritten_tag_data.extend_from_slice(&tag_data[6..]);
+                        rewritten_tag_data[0] = (tag_data[0] & !0b111111) | (tag_len as u8);
+                        rewritten_tag_data
+                    } else {
+                        tag_data.to_vec()
+                    };
                 }
+                Some(TagCode::End) => panic!("Tag not found"),
+                _ => {}
             }
         }
     }
@@ -2695,11 +2667,6 @@ pub mod tests {
 
     #[test]
     fn read_swfs() {
-        fn read_from_file(path: &str) -> SwfBuf {
-            let data = std::fs::read(path).unwrap();
-            decompress_swf(&data[..]).unwrap()
-        }
-
         assert_eq!(
             read_from_file("tests/swfs/uncompressed.swf")
                 .header
@@ -3004,15 +2971,9 @@ pub mod tests {
     #[test]
     fn read_line_style() {
         // DefineShape1 and 2 read RGB colors.
-        let line_style = LineStyle::new_v1(
-            Twips::from_pixels(0.0),
-            Color {
-                r: 255,
-                g: 0,
-                b: 0,
-                a: 255,
-            },
-        );
+        let line_style = LineStyle::new()
+            .with_width(Twips::from_pixels(0.0))
+            .with_color(Color::from_rgba(0xffff0000));
         assert_eq!(
             reader(&[0, 0, 255, 0, 0]).read_line_style(2).unwrap(),
             line_style
@@ -3076,13 +3037,11 @@ pub mod tests {
                 Ok(tag) => tag,
                 Err(e) => panic!("Error parsing tag: {}", e),
             };
-            if parsed_tag != expected_tag {
-                // Failed, result doesn't match.
-                panic!(
-                    "Incorrectly parsed tag.\nRead:\n{:#?}\n\nExpected:\n{:#?}",
-                    parsed_tag, expected_tag
-                );
-            }
+            assert_eq!(
+                parsed_tag, expected_tag,
+                "Incorrectly parsed tag.\nRead:\n{:#?}\n\nExpected:\n{:#?}",
+                parsed_tag, expected_tag
+            );
         }
     }
 
@@ -3112,5 +3071,44 @@ pub mod tests {
                 panic!("Expected SwfParseError, got {:?}", result);
             }
         }
+    }
+
+    /// Ensure that we can read a PlaceObject3 tag that
+    /// inccorrectly omits the 'is_bitmap_cached' u8
+    /// Extracted from #7098
+    #[test]
+    fn read_incorrect_place_object_3() {
+        let place_object = Tag::PlaceObject(Box::new(PlaceObject {
+            version: 3,
+            action: PlaceObjectAction::Place(161),
+            depth: 1,
+            matrix: Some(Matrix {
+                a: Fixed16::ONE,
+                b: Fixed16::ZERO,
+                c: Fixed16::ZERO,
+                d: Fixed16::ONE,
+                tx: Twips::from_pixels(0.0),
+                ty: Twips::from_pixels(0.0),
+            }),
+            color_transform: None,
+            ratio: None,
+            name: None,
+            clip_depth: None,
+            class_name: None,
+            filters: None,
+            background_color: None,
+            blend_mode: None,
+            clip_actions: None,
+            has_image: false,
+            is_bitmap_cached: Some(true),
+            is_visible: None,
+            amf_data: None,
+        }));
+        assert_eq!(
+            reader(&[0x88, 0x11, 0x06, 0x4, 0x01, 0x00, 0xA1, 0x00, 0x02, 0x00])
+                .read_tag()
+                .unwrap(),
+            place_object
+        );
     }
 }

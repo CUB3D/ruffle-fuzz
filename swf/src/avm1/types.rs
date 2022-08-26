@@ -1,5 +1,6 @@
 use crate::string::SwfStr;
 use bitflags::bitflags;
+use std::num::NonZeroU8;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Action<'a> {
@@ -19,19 +20,16 @@ pub enum Action<'a> {
     CastOp,
     CharToAscii,
     CloneSprite,
-    ConstantPool(Vec<&'a SwfStr>),
+    ConstantPool(ConstantPool<'a>),
     Decrement,
-    DefineFunction {
-        name: &'a SwfStr,
-        params: Vec<&'a SwfStr>,
-        actions: &'a [u8],
-    },
-    DefineFunction2(Function<'a>),
+    DefineFunction(DefineFunction<'a>),
+    DefineFunction2(DefineFunction2<'a>),
     DefineLocal,
     DefineLocal2,
     Delete,
     Delete2,
     Divide,
+    End,
     EndDrag,
     Enumerate,
     Enumerate2,
@@ -41,34 +39,20 @@ pub enum Action<'a> {
     GetMember,
     GetProperty,
     GetTime,
-    GetUrl {
-        url: &'a SwfStr,
-        target: &'a SwfStr,
-    },
-    GetUrl2 {
-        send_vars_method: SendVarsMethod,
-        is_target_sprite: bool,
-        is_load_vars: bool,
-    },
+    GetUrl(GetUrl<'a>),
+    GetUrl2(GetUrl2),
     GetVariable,
-    GotoFrame(u16),
-    GotoFrame2 {
-        set_playing: bool,
-        scene_offset: u16,
-    },
-    GotoLabel(&'a SwfStr),
+    GotoFrame(GotoFrame),
+    GotoFrame2(GotoFrame2),
+    GotoLabel(GotoLabel<'a>),
     Greater,
-    If {
-        offset: i16,
-    },
+    If(If),
     ImplementsOp,
     Increment,
     InitArray,
     InitObject,
     InstanceOf,
-    Jump {
-        offset: i16,
-    },
+    Jump(Jump),
     Less,
     Less2,
     MBAsciiToChar,
@@ -85,21 +69,21 @@ pub enum Action<'a> {
     Play,
     Pop,
     PreviousFrame,
-    Push(Vec<Value<'a>>),
+    Push(Push<'a>),
     PushDuplicate,
     RandomNumber,
     RemoveSprite,
     Return,
     SetMember,
     SetProperty,
-    SetTarget(&'a SwfStr),
+    SetTarget(SetTarget<'a>),
     SetTarget2,
     SetVariable,
     StackSwap,
     StartDrag,
     Stop,
     StopSounds,
-    StoreRegister(u8),
+    StoreRegister(StoreRegister),
     StrictEquals,
     StringAdd,
     StringEquals,
@@ -115,46 +99,28 @@ pub enum Action<'a> {
     ToString,
     ToggleQuality,
     Trace,
-    Try(TryBlock<'a>),
+    Try(Try<'a>),
     TypeOf,
-    WaitForFrame {
-        frame: u16,
-        num_actions_to_skip: u8,
-    },
-    WaitForFrame2 {
-        num_actions_to_skip: u8,
-    },
-    With {
-        actions: &'a [u8],
-    },
-    Unknown {
-        opcode: u8,
-        data: &'a [u8],
-    },
+    WaitForFrame(WaitForFrame),
+    WaitForFrame2(WaitForFrame2),
+    With(With<'a>),
+    Unknown(Unknown<'a>),
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Value<'a> {
-    Undefined,
-    Null,
-    Bool(bool),
-    Int(i32),
-    Float(f32),
-    Double(f64),
-    Str(&'a SwfStr),
-    Register(u8),
-    ConstantPool(u16),
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ConstantPool<'a> {
+    pub strings: Vec<&'a SwfStr>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SendVarsMethod {
-    None,
-    Get,
-    Post,
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DefineFunction<'a> {
+    pub name: &'a SwfStr,
+    pub params: Vec<&'a SwfStr>,
+    pub actions: &'a [u8],
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Function<'a> {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DefineFunction2<'a> {
     pub name: &'a SwfStr,
     pub register_count: u8,
     pub params: Vec<FunctionParam<'a>>,
@@ -162,10 +128,31 @@ pub struct Function<'a> {
     pub actions: &'a [u8],
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+impl<'a> From<DefineFunction<'a>> for DefineFunction2<'a> {
+    #[inline]
+    fn from(function: DefineFunction<'a>) -> Self {
+        let params = function
+            .params
+            .into_iter()
+            .map(|param| FunctionParam {
+                name: param,
+                register_index: None,
+            })
+            .collect();
+        Self {
+            name: function.name,
+            register_count: 0,
+            params,
+            flags: FunctionFlags::default(),
+            actions: function.actions,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FunctionParam<'a> {
     pub name: &'a SwfStr,
-    pub register_index: Option<u8>,
+    pub register_index: Option<NonZeroU8>,
 }
 
 bitflags! {
@@ -182,15 +169,191 @@ bitflags! {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct TryBlock<'a> {
-    pub try_actions: &'a [u8],
-    pub catch: Option<(CatchVar<'a>, &'a [u8])>,
-    pub finally: Option<&'a [u8]>,
+impl Default for FunctionFlags {
+    fn default() -> Self {
+        Self::empty()
+    }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GetUrl<'a> {
+    pub url: &'a SwfStr,
+    pub target: &'a SwfStr,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GetUrl2(pub(crate) GetUrlFlags);
+
+impl GetUrl2 {
+    /// Returns the flags for an AVM1 `loadMovie` call.
+    #[inline]
+    pub fn for_load_movie(method: SendVarsMethod) -> Self {
+        let mut flags = Self(GetUrlFlags::LOAD_TARGET);
+        flags.set_send_vars_method(method);
+        flags
+    }
+
+    /// Returns the flags for an AVM1 `getURL` call.
+    #[inline]
+    pub fn for_get_url(method: SendVarsMethod) -> Self {
+        let mut flags = Self(GetUrlFlags::empty());
+        flags.set_send_vars_method(method);
+        flags
+    }
+
+    /// Returns the flags for an AVM1 `loadVariables` or `LoadVars.load` call.
+    #[inline]
+    pub fn for_load_vars(method: SendVarsMethod) -> Self {
+        let mut flags = Self(GetUrlFlags::LOAD_VARIABLES);
+        flags.set_send_vars_method(method);
+        flags
+    }
+
+    /// The HTTP method used for sending data.
+    #[inline]
+    pub fn send_vars_method(&self) -> SendVarsMethod {
+        match self.0 & GetUrlFlags::METHOD_MASK {
+            GetUrlFlags::METHOD_NONE => SendVarsMethod::None,
+            GetUrlFlags::METHOD_GET => SendVarsMethod::Get,
+            GetUrlFlags::METHOD_POST => SendVarsMethod::Post,
+            _ => unreachable!(),
+        }
+    }
+
+    /// Sets the HTTP method used for sending data.
+    #[inline]
+    pub fn set_send_vars_method(&mut self, method: SendVarsMethod) {
+        self.0 -= GetUrlFlags::METHOD_MASK;
+        self.0 |= GetUrlFlags::from_bits(method as u8).unwrap();
+    }
+
+    /// Whether this action will load a movie or image into a display object.
+    #[inline]
+    pub fn is_target_sprite(&self) -> bool {
+        self.0.contains(GetUrlFlags::LOAD_TARGET)
+    }
+
+    /// Whether this action will load variables into an ActionScript object.
+    #[inline]
+    pub fn is_load_vars(&self) -> bool {
+        self.0.contains(GetUrlFlags::LOAD_VARIABLES)
+    }
+}
+
+bitflags! {
+    // NOTE: The GetURL2 flag layout is listed backwards in the SWF19 specs.
+    pub(crate) struct GetUrlFlags: u8 {
+        const METHOD_NONE = 0;
+        const METHOD_GET = 1;
+        const METHOD_POST = 2;
+        const METHOD_MASK = 3;
+
+        const LOAD_TARGET = 1 << 6;
+        const LOAD_VARIABLES = 1 << 7;
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum SendVarsMethod {
+    None = 0,
+    Get = 1,
+    Post = 2,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GotoFrame {
+    pub frame: u16,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GotoFrame2 {
+    pub set_playing: bool,
+    pub scene_offset: u16,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GotoLabel<'a> {
+    pub label: &'a SwfStr,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct If {
+    pub offset: i16,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Jump {
+    pub offset: i16,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Push<'a> {
+    pub values: Vec<Value<'a>>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Value<'a> {
+    Undefined,
+    Null,
+    Bool(bool),
+    Int(i32),
+    Float(f32),
+    Double(f64),
+    Str(&'a SwfStr),
+    Register(u8),
+    ConstantPool(u16),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SetTarget<'a> {
+    pub target: &'a SwfStr,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StoreRegister {
+    pub register: u8,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Try<'a> {
+    pub try_body: &'a [u8],
+    pub catch_body: Option<(CatchVar<'a>, &'a [u8])>,
+    pub finally_body: Option<&'a [u8]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CatchVar<'a> {
     Var(&'a SwfStr),
     Register(u8),
+}
+
+bitflags! {
+    pub struct TryFlags: u8 {
+        const CATCH_BLOCK = 1 << 0;
+        const FINALLY_BLOCK = 1 << 1;
+        const CATCH_IN_REGISTER = 1 << 2;
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WaitForFrame {
+    pub frame: u16,
+    pub num_actions_to_skip: u8,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WaitForFrame2 {
+    pub num_actions_to_skip: u8,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct With<'a> {
+    pub actions: &'a [u8],
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Unknown<'a> {
+    pub opcode: u8,
+    pub data: &'a [u8],
 }

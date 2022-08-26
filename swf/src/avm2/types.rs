@@ -24,8 +24,13 @@ pub struct ConstantPool {
     pub multinames: Vec<Multiname>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+// clippy false positive: https://github.com/rust-lang/rust-clippy/issues/8867
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Index<T>(pub u32, pub PhantomData<T>);
+
+// see: https://github.com/rust-lang/rust/issues/26925
+impl<T: Clone> Copy for Index<T> {}
 
 impl<T> Index<T> {
     pub fn new(i: u32) -> Index<T> {
@@ -82,6 +87,10 @@ pub enum Multiname {
     MultinameLA {
         namespace_set: Index<NamespaceSet>,
     },
+    TypeName {
+        base_type: Index<Multiname>,
+        parameters: Vec<Index<Multiname>>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -114,7 +123,7 @@ pub struct MethodBody {
     pub traits: Vec<Trait>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Exception {
     pub from_offset: u32,
     pub to_offset: u32,
@@ -123,7 +132,7 @@ pub struct Exception {
     pub type_name: Index<Multiname>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Opcode;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -145,13 +154,13 @@ pub enum DefaultValue {
     Private(Index<Namespace>),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Metadata {
     pub name: Index<String>,
     pub items: Vec<MetadataItem>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MetadataItem {
     pub key: Index<String>,
     pub value: Index<String>,
@@ -229,6 +238,9 @@ pub struct Script {
 pub enum Op {
     Add,
     AddI,
+    ApplyType {
+        num_types: u32,
+    },
     AsType {
         type_name: Index<Multiname>,
     },
@@ -237,6 +249,10 @@ pub enum Op {
     BitNot,
     BitOr,
     BitXor,
+    Bkpt,
+    BkptLine {
+        line_num: u32,
+    },
     Call {
         num_args: u32,
     },
@@ -273,7 +289,12 @@ pub enum Op {
         index: Index<Multiname>,
     },
     CoerceA,
+    CoerceB,
+    CoerceD,
+    CoerceI,
+    CoerceO,
     CoerceS,
+    CoerceU,
     Construct {
         num_args: u32,
     },
@@ -321,6 +342,9 @@ pub enum Op {
     Equals,
     EscXAttr,
     EscXElem,
+    FindDef {
+        index: Index<Multiname>,
+    },
     FindProperty {
         index: Index<Multiname>,
     },
@@ -338,6 +362,9 @@ pub enum Op {
         index: Index<Multiname>,
     },
     GetLocal {
+        index: u32,
+    },
+    GetOuterScope {
         index: u32,
     },
     GetProperty {
@@ -377,6 +404,9 @@ pub enum Op {
     IfLt {
         offset: i32,
     },
+    IfNe {
+        offset: i32,
+    },
     IfNge {
         offset: i32,
     },
@@ -387,9 +417,6 @@ pub enum Op {
         offset: i32,
     },
     IfNlt {
-        offset: i32,
-    },
-    IfNe {
         offset: i32,
     },
     IfStrictEq {
@@ -467,6 +494,9 @@ pub enum Op {
     PushByte {
         value: u8,
     },
+    PushConstant {
+        value: u32,
+    },
     PushDouble {
         value: Index<f64>,
     },
@@ -495,10 +525,10 @@ pub enum Op {
     ReturnValue,
     ReturnVoid,
     RShift,
-    SetLocal {
+    SetGlobalSlot {
         index: u32,
     },
-    SetGlobalSlot {
+    SetLocal {
         index: u32,
     },
     SetProperty {
@@ -524,5 +554,6 @@ pub enum Op {
     Sxi8,
     Throw,
     TypeOf,
+    Timestamp,
     URShift,
 }

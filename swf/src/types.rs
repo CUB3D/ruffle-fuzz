@@ -13,7 +13,7 @@ pub use fixed::*;
 pub use matrix::Matrix;
 
 /// A complete header and tags in the SWF file.
-/// This is returned by the `swf::read_swf` convenience method.
+/// This is returned by the `swf::parse_swf` convenience method.
 #[derive(Debug)]
 pub struct Swf<'a> {
     pub header: HeaderExt,
@@ -35,7 +35,7 @@ pub struct SwfBuf {
 /// Notably contains the compression format used by the rest of the SWF data.
 ///
 /// [SWF19 p.27](https://www.adobe.com/content/dam/acom/en/devnet/pdf/swf-file-format-spec.pdf#page=27)
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Header {
     pub compression: Compression,
     pub version: u8,
@@ -175,7 +175,7 @@ impl HeaderExt {
 ///
 /// The vast majority of SWFs will use zlib compression.
 /// [SWF19 p.27](https://www.adobe.com/content/dam/acom/en/devnet/pdf/swf-file-format-spec.pdf#page=27)
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Compression {
     None,
     Zlib,
@@ -193,7 +193,7 @@ pub enum Compression {
 ///
 /// [`from_pixels`]: Twips::from_pixels
 /// [`to_pixels`]: Twips::to_pixels
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Default, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Twips(i32);
 
 impl Twips {
@@ -302,6 +302,7 @@ impl Twips {
     /// assert_eq!(Twips::new(i32::MIN).saturating_sub(Twips::new(5)), Twips::new(i32::MIN));
     /// assert_eq!(Twips::new(i32::MAX).saturating_sub(Twips::new(-100)), Twips::new(i32::MAX));
     /// ```
+    #[must_use]
     pub const fn saturating_sub(self, rhs: Self) -> Self {
         Self(self.0.saturating_sub(rhs.0))
     }
@@ -368,7 +369,7 @@ impl std::fmt::Display for Twips {
 /// A rectangular region defined by minimum
 /// and maximum x- and y-coordinate positions
 /// measured in [`Twips`].
-#[derive(Debug, PartialEq, Clone, Default)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Rectangle {
     /// The minimum x-position of the rectangle.
     pub x_min: Twips,
@@ -386,7 +387,7 @@ pub struct Rectangle {
 /// An RGBA (red, green, blue, alpha) color.
 ///
 /// All components are stored as [`u8`] and have a color range of 0-255.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Color {
     /// The red component value.
     pub r: u8,
@@ -402,6 +403,9 @@ pub struct Color {
 }
 
 impl Color {
+    pub const BLACK: Self = Self::from_rgb(0, 255);
+    pub const WHITE: Self = Self::from_rgb(0xFFFFFF, 255);
+
     /// Creates a `Color` from a 32-bit `rgb` value and an `alpha` value.
     ///
     /// The byte-ordering of the 32-bit `rgb` value is XXRRGGBB.
@@ -420,12 +424,26 @@ impl Color {
     /// let blue = Color::from_rgb(0x0000FF, 255);
     /// ```
     pub const fn from_rgb(rgb: u32, alpha: u8) -> Self {
-        Self {
-            r: ((rgb & 0xFF_0000) >> 16) as u8,
-            g: ((rgb & 0x00_FF00) >> 8) as u8,
-            b: (rgb & 0x00_00FF) as u8,
-            a: alpha,
-        }
+        let [b, g, r, _] = rgb.to_le_bytes();
+        Self { r, g, b, a: alpha }
+    }
+
+    /// Creates a `Color` from a 32-bit `rgba` value.
+    ///
+    /// The byte-ordering of the 32-bit `rgba` value is AARRGGBB.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use swf::Color;
+    ///
+    /// let red = Color::from_rgba(0xFFFF0000);
+    /// let green = Color::from_rgba(0xFF00FF00);
+    /// let blue = Color::from_rgba(0xFF0000FF);
+    /// ```
+    pub const fn from_rgba(rgba: u32) -> Self {
+        let [b, g, r, a] = rgba.to_le_bytes();
+        Self { r, g, b, a }
     }
 
     /// Converts the color to a 32-bit RGB value.
@@ -451,11 +469,26 @@ impl Color {
     /// assert_eq!(color1.to_rgb(), color2.to_rgb());
     /// ```
     pub const fn to_rgb(&self) -> u32 {
-        ((self.r as u32) << 16) | ((self.g as u32) << 8) | (self.b as u32)
+        u32::from_le_bytes([self.b, self.g, self.r, 0])
+    }
+
+    /// Converts the color to a 32-bit RGBA value.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    /// ```rust
+    /// use swf::Color;
+    ///
+    /// let color = Color::from_rgb(0xFF00FF, 255);
+    /// assert_eq!(color.to_rgba(), 0xFFFF00FF);
+    /// ```
+    pub const fn to_rgba(&self) -> u32 {
+        u32::from_le_bytes([self.b, self.g, self.r, self.a])
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ColorTransform {
     pub r_multiply: Fixed8,
     pub g_multiply: Fixed8,
@@ -488,7 +521,7 @@ impl Default for ColorTransform {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, FromPrimitive)]
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 pub enum Language {
     Unknown = 0,
     Latin = 1,
@@ -536,19 +569,19 @@ impl Default for FileAttributes {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct FrameLabel<'a> {
     pub label: &'a SwfStr,
     pub is_anchor: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct DefineSceneAndFrameLabelData<'a> {
     pub scenes: Vec<FrameLabelData<'a>>,
     pub frame_labels: Vec<FrameLabelData<'a>>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct FrameLabelData<'a> {
     pub frame_num: u32,
     pub label: &'a SwfStr,
@@ -557,7 +590,7 @@ pub struct FrameLabelData<'a> {
 pub type Depth = u16;
 pub type CharacterId = u16;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct PlaceObject<'a> {
     pub version: u8,
     pub action: PlaceObjectAction,
@@ -572,20 +605,42 @@ pub struct PlaceObject<'a> {
     pub background_color: Option<Color>,
     pub blend_mode: Option<BlendMode>,
     pub clip_actions: Option<Vec<ClipAction<'a>>>,
-    pub is_image: bool,
+    pub has_image: bool,
     pub is_bitmap_cached: Option<bool>,
     pub is_visible: Option<bool>,
     pub amf_data: Option<&'a [u8]>,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+bitflags! {
+    pub struct PlaceFlag: u16 {
+        const MOVE = 1 << 0;
+        const HAS_CHARACTER = 1 << 1;
+        const HAS_MATRIX = 1 << 2;
+        const HAS_COLOR_TRANSFORM = 1 << 3;
+        const HAS_RATIO = 1 << 4;
+        const HAS_NAME = 1 << 5;
+        const HAS_CLIP_DEPTH = 1 << 6;
+        const HAS_CLIP_ACTIONS = 1 << 7;
+
+        // PlaceObject3
+        const HAS_FILTER_LIST = 1 << 8;
+        const HAS_BLEND_MODE = 1 << 9;
+        const HAS_CACHE_AS_BITMAP = 1 << 10;
+        const HAS_CLASS_NAME = 1 << 11;
+        const HAS_IMAGE = 1 << 12;
+        const HAS_VISIBLE = 1 << 13;
+        const OPAQUE_BACKGROUND = 1 << 14;
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PlaceObjectAction {
     Place(CharacterId),
     Modify,
     Replace(CharacterId),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Filter {
     DropShadowFilter(Box<DropShadowFilter>),
     BlurFilter(Box<BlurFilter>),
@@ -597,7 +652,7 @@ pub enum Filter {
     GradientBevelFilter(Box<GradientBevelFilter>),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DropShadowFilter {
     pub color: Color,
     pub blur_x: Fixed16,
@@ -610,14 +665,14 @@ pub struct DropShadowFilter {
     pub num_passes: u8,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BlurFilter {
     pub blur_x: Fixed16,
     pub blur_y: Fixed16,
     pub num_passes: u8,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GlowFilter {
     pub color: Color,
     pub blur_x: Fixed16,
@@ -628,7 +683,7 @@ pub struct GlowFilter {
     pub num_passes: u8,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BevelFilter {
     pub shadow_color: Color,
     pub highlight_color: Color,
@@ -643,7 +698,7 @@ pub struct BevelFilter {
     pub num_passes: u8,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GradientGlowFilter {
     pub colors: Vec<GradientRecord>,
     pub blur_x: Fixed16,
@@ -657,7 +712,7 @@ pub struct GradientGlowFilter {
     pub num_passes: u8,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConvolutionFilter {
     pub num_matrix_rows: u8,
     pub num_matrix_cols: u8,
@@ -669,12 +724,12 @@ pub struct ConvolutionFilter {
     pub is_preserve_alpha: bool,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ColorMatrixFilter {
     pub matrix: [Fixed16; 20],
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GradientBevelFilter {
     pub colors: Vec<GradientRecord>,
     pub blur_x: Fixed16,
@@ -688,7 +743,7 @@ pub struct GradientBevelFilter {
     pub num_passes: u8,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 pub enum BlendMode {
     Normal = 0,
     Layer = 2,
@@ -715,11 +770,17 @@ impl BlendMode {
     }
 }
 
+impl Default for BlendMode {
+    fn default() -> Self {
+        BlendMode::Normal
+    }
+}
+
 /// An clip action (a.k.a. clip event) placed on a MovieClip instance.
 /// Created in the Flash IDE using `onClipEvent` or `on` blocks.
 ///
 /// [SWF19 pp.37-38 ClipActionRecord](https://www.adobe.com/content/dam/acom/en/devnet/pdf/swf-file-format-spec.pdf#page=39)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClipAction<'a> {
     pub events: ClipEventFlag,
     pub key_code: Option<KeyCode>,
@@ -731,25 +792,30 @@ bitflags! {
     ///
     /// [SWF19 pp.48-50 ClipEvent](https://www.adobe.com/content/dam/acom/en/devnet/pdf/swf-file-format-spec.pdf#page=50)
     pub struct ClipEventFlag: u32 {
-        const CONSTRUCT       = 1 << 0;
-        const DATA            = 1 << 1;
-        const DRAG_OUT        = 1 << 2;
-        const DRAG_OVER       = 1 << 3;
-        const ENTER_FRAME     = 1 << 4;
-        const INITIALIZE      = 1 << 5;
-        const KEY_UP          = 1 << 6;
-        const KEY_DOWN        = 1 << 7;
-        const KEY_PRESS       = 1 << 8;
-        const LOAD            = 1 << 9;
-        const MOUSE_UP        = 1 << 10;
-        const MOUSE_DOWN      = 1 << 11;
-        const MOUSE_MOVE      = 1 << 12;
-        const PRESS           = 1 << 13;
+        const LOAD            = 1 << 0;
+        const ENTER_FRAME     = 1 << 1;
+        const UNLOAD          = 1 << 2;
+        const MOUSE_MOVE      = 1 << 3;
+        const MOUSE_DOWN      = 1 << 4;
+        const MOUSE_UP        = 1 << 5;
+        const KEY_DOWN        = 1 << 6;
+        const KEY_UP          = 1 << 7;
+
+        // Added in SWF6.
+        const DATA            = 1 << 8;
+        const INITIALIZE      = 1 << 9;
+        const PRESS           = 1 << 10;
+        const RELEASE         = 1 << 11;
+        const RELEASE_OUTSIDE = 1 << 12;
+        const ROLL_OVER       = 1 << 13;
         const ROLL_OUT        = 1 << 14;
-        const ROLL_OVER       = 1 << 15;
-        const RELEASE         = 1 << 16;
-        const RELEASE_OUTSIDE = 1 << 17;
-        const UNLOAD          = 1 << 18;
+        const DRAG_OVER       = 1 << 15;
+        const DRAG_OUT        = 1 << 16;
+        const KEY_PRESS       = 1 << 17;
+
+        // Construct was only added in SWF7, but it's not version-gated;
+        // Construct events will still fire in SWF6 in a v7+ player (#1424).
+        const CONSTRUCT       = 1 << 18;
     }
 }
 
@@ -775,10 +841,7 @@ pub enum Tag<'a> {
     Protect(Option<&'a SwfStr>),
     CsmTextSettings(CsmTextSettings),
     DebugId(DebugId),
-    DefineBinaryData {
-        id: CharacterId,
-        data: &'a [u8],
-    },
+    DefineBinaryData(DefineBinaryData<'a>),
     DefineBits {
         id: CharacterId,
         jpeg_data: &'a [u8],
@@ -868,13 +931,13 @@ pub enum Tag<'a> {
 
 pub type ExportAssets<'a> = Vec<ExportedAsset<'a>>;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExportedAsset<'a> {
     pub id: CharacterId,
     pub name: &'a SwfStr,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RemoveObject {
     pub depth: Depth,
     pub character_id: Option<CharacterId>,
@@ -882,13 +945,13 @@ pub struct RemoveObject {
 
 pub type SetBackgroundColor = Color;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SymbolClassLink<'a> {
     pub id: CharacterId,
     pub class_name: &'a SwfStr,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ShapeContext {
     pub swf_version: u8,
     pub shape_version: u8,
@@ -896,7 +959,7 @@ pub struct ShapeContext {
     pub num_line_bits: u8,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Shape {
     pub version: u8,
     pub id: CharacterId,
@@ -909,7 +972,7 @@ pub struct Shape {
     pub shape: Vec<ShapeRecord>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Sound<'a> {
     pub id: CharacterId,
     pub format: SoundFormat,
@@ -917,7 +980,7 @@ pub struct Sound<'a> {
     pub data: &'a [u8],
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SoundInfo {
     pub event: SoundEvent,
     pub in_sample: Option<u32>,
@@ -926,7 +989,7 @@ pub struct SoundInfo {
     pub envelope: Option<SoundEnvelope>,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, FromPrimitive)]
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 pub enum SoundEvent {
     Event = 0,
     Start = 1,
@@ -944,7 +1007,7 @@ impl SoundEvent {
 
 pub type SoundEnvelope = Vec<SoundEnvelopePoint>;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SoundEnvelopePoint {
     pub sample: u32,
     pub left_volume: f32,
@@ -964,15 +1027,15 @@ pub struct Sprite<'a> {
     pub tags: Vec<Tag<'a>>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ShapeStyles {
     pub fill_styles: Vec<FillStyle>,
     pub line_styles: Vec<LineStyle>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ShapeRecord {
-    StyleChange(StyleChangeData),
+    StyleChange(Box<StyleChangeData>),
     StraightEdge {
         delta_x: Twips,
         delta_y: Twips,
@@ -985,7 +1048,7 @@ pub enum ShapeRecord {
     },
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StyleChangeData {
     pub move_to: Option<(Twips, Twips)>,
     pub fill_style_0: Option<u32>,
@@ -994,7 +1057,7 @@ pub struct StyleChangeData {
     pub new_styles: Option<ShapeStyles>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum FillStyle {
     Color(Color),
     LinearGradient(Gradient),
@@ -1011,7 +1074,7 @@ pub enum FillStyle {
     },
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Gradient {
     pub matrix: Matrix,
     pub spread: GradientSpread,
@@ -1019,7 +1082,7 @@ pub struct Gradient {
     pub records: Vec<GradientRecord>,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, FromPrimitive)]
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 pub enum GradientSpread {
     Pad = 0,
     Reflect = 1,
@@ -1028,11 +1091,16 @@ pub enum GradientSpread {
 
 impl GradientSpread {
     pub fn from_u8(n: u8) -> Option<Self> {
-        num_traits::FromPrimitive::from_u8(n)
+        num_traits::FromPrimitive::from_u8(match n {
+            // Per SWF19 p. 136, SpreadMode 3 is reserved.
+            // Flash treats it as pad mode.
+            3 => 0,
+            n => n,
+        })
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, FromPrimitive)]
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 pub enum GradientInterpolation {
     Rgb = 0,
     LinearRgb = 1,
@@ -1040,48 +1108,203 @@ pub enum GradientInterpolation {
 
 impl GradientInterpolation {
     pub fn from_u8(n: u8) -> Option<Self> {
-        num_traits::FromPrimitive::from_u8(n)
+        num_traits::FromPrimitive::from_u8(match n {
+            // Per SWF19 p. 136, InterpolationMode 2 and 3 are reserved.
+            // Flash treats them as normal RGB mode interpolation.
+            2 | 3 => 0,
+            n => n,
+        })
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GradientRecord {
     pub ratio: u8,
     pub color: Color,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LineStyle {
-    pub width: Twips,
-    pub color: Color,
-    pub start_cap: LineCapStyle,
-    pub end_cap: LineCapStyle,
-    pub join_style: LineJoinStyle,
-    pub fill_style: Option<FillStyle>,
-    pub allow_scale_x: bool,
-    pub allow_scale_y: bool,
-    pub is_pixel_hinted: bool,
-    pub allow_close: bool,
+    pub(crate) width: Twips,
+    pub(crate) fill_style: FillStyle,
+    pub(crate) flags: LineStyleFlag,
+    pub(crate) miter_limit: Fixed8,
 }
 
 impl LineStyle {
-    pub const fn new_v1(width: Twips, color: Color) -> LineStyle {
-        LineStyle {
-            width,
-            color,
-            start_cap: LineCapStyle::Round,
-            end_cap: LineCapStyle::Round,
-            join_style: LineJoinStyle::Round,
-            fill_style: None,
-            allow_scale_x: false,
-            allow_scale_y: false,
-            is_pixel_hinted: false,
-            allow_close: true,
+    #[inline]
+    pub fn new() -> LineStyle {
+        Default::default()
+    }
+
+    #[inline]
+    pub fn allow_close(&self) -> bool {
+        !self.flags.contains(LineStyleFlag::NO_CLOSE)
+    }
+
+    #[inline]
+    pub fn with_allow_close(mut self, val: bool) -> Self {
+        self.flags.set(LineStyleFlag::NO_CLOSE, !val);
+        self
+    }
+
+    #[inline]
+    pub fn allow_scale_x(&self) -> bool {
+        !self.flags.contains(LineStyleFlag::NO_H_SCALE)
+    }
+
+    #[inline]
+    pub fn with_allow_scale_x(mut self, val: bool) -> Self {
+        self.flags.set(LineStyleFlag::NO_H_SCALE, !val);
+        self
+    }
+
+    #[inline]
+    pub fn allow_scale_y(&self) -> bool {
+        !self.flags.contains(LineStyleFlag::NO_V_SCALE)
+    }
+
+    #[inline]
+    pub fn with_allow_scale_y(mut self, val: bool) -> Self {
+        self.flags.set(LineStyleFlag::NO_V_SCALE, !val);
+        self
+    }
+
+    #[inline]
+    pub fn is_pixel_hinted(&self) -> bool {
+        self.flags.contains(LineStyleFlag::PIXEL_HINTING)
+    }
+
+    #[inline]
+    pub fn with_is_pixel_hinted(mut self, val: bool) -> Self {
+        self.flags.set(LineStyleFlag::PIXEL_HINTING, val);
+        self
+    }
+
+    #[inline]
+    pub fn start_cap(&self) -> LineCapStyle {
+        let cap = (self.flags & LineStyleFlag::START_CAP_STYLE).bits() >> 6;
+        LineCapStyle::from_u8(cap as u8).unwrap()
+    }
+
+    #[inline]
+    pub fn with_start_cap(mut self, val: LineCapStyle) -> Self {
+        self.flags -= LineStyleFlag::START_CAP_STYLE;
+        self.flags |= LineStyleFlag::from_bits_truncate((val as u16) << 6);
+        self
+    }
+
+    #[inline]
+    pub fn end_cap(&self) -> LineCapStyle {
+        let cap = (self.flags & LineStyleFlag::END_CAP_STYLE).bits() >> 8;
+        LineCapStyle::from_u8(cap as u8).unwrap()
+    }
+
+    #[inline]
+    pub fn with_end_cap(mut self, val: LineCapStyle) -> Self {
+        self.flags -= LineStyleFlag::END_CAP_STYLE;
+        self.flags |= LineStyleFlag::from_bits_truncate((val as u16) << 8);
+        self
+    }
+
+    #[inline]
+    pub fn join_style(&self) -> LineJoinStyle {
+        match self.flags & LineStyleFlag::JOIN_STYLE {
+            LineStyleFlag::ROUND => LineJoinStyle::Round,
+            LineStyleFlag::BEVEL => LineJoinStyle::Bevel,
+            LineStyleFlag::MITER => LineJoinStyle::Miter(self.miter_limit),
+            _ => unreachable!(),
+        }
+    }
+
+    #[inline]
+    pub fn with_join_style(mut self, val: LineJoinStyle) -> Self {
+        self.flags -= LineStyleFlag::JOIN_STYLE;
+        self.flags |= match val {
+            LineJoinStyle::Round => LineStyleFlag::ROUND,
+            LineJoinStyle::Bevel => LineStyleFlag::BEVEL,
+            LineJoinStyle::Miter(miter_limit) => {
+                self.miter_limit = miter_limit;
+                LineStyleFlag::MITER
+            }
+        };
+        self
+    }
+
+    #[inline]
+    pub fn fill_style(&self) -> &FillStyle {
+        &self.fill_style
+    }
+
+    #[inline]
+    pub fn with_fill_style(mut self, val: FillStyle) -> Self {
+        self.flags
+            .set(LineStyleFlag::HAS_FILL, !matches!(val, FillStyle::Color(_)));
+        self.fill_style = val;
+        self
+    }
+
+    #[inline]
+    pub fn with_color(mut self, val: Color) -> Self {
+        self.flags.remove(LineStyleFlag::HAS_FILL);
+        self.fill_style = FillStyle::Color(val);
+        self
+    }
+
+    #[inline]
+    pub fn width(&self) -> Twips {
+        self.width
+    }
+
+    #[inline]
+    pub fn with_width(mut self, val: Twips) -> Self {
+        self.width = val;
+        self
+    }
+}
+
+impl Default for LineStyle {
+    #[inline]
+    fn default() -> Self {
+        // Hairline black stroke.
+        Self {
+            width: Twips::ZERO,
+            fill_style: FillStyle::Color(Color::BLACK),
+            flags: Default::default(),
+            miter_limit: Default::default(),
         }
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, FromPrimitive)]
+bitflags! {
+    pub struct LineStyleFlag: u16 {
+        // First byte.
+        const PIXEL_HINTING = 1 << 0;
+        const NO_V_SCALE = 1 << 1;
+        const NO_H_SCALE = 1 << 2;
+        const HAS_FILL = 1 << 3;
+        const JOIN_STYLE = 0b11 << 4;
+        const START_CAP_STYLE = 0b11 << 6;
+
+        // Second byte.
+        const END_CAP_STYLE = 0b11 << 8;
+        const NO_CLOSE = 1 << 10;
+
+        // JOIN_STYLE mask values.
+        const ROUND = 0b00 << 4;
+        const BEVEL = 0b01 << 4;
+        const MITER = 0b10 << 4;
+    }
+}
+
+impl Default for LineStyleFlag {
+    #[inline]
+    fn default() -> Self {
+        LineStyleFlag::empty()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 pub enum LineCapStyle {
     Round = 0,
     None = 1,
@@ -1089,19 +1312,34 @@ pub enum LineCapStyle {
 }
 
 impl LineCapStyle {
+    #[inline]
     pub fn from_u8(n: u8) -> Option<Self> {
         num_traits::FromPrimitive::from_u8(n)
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+impl Default for LineCapStyle {
+    #[inline]
+    fn default() -> Self {
+        Self::Round
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LineJoinStyle {
     Round,
     Bevel,
     Miter(Fixed8),
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, FromPrimitive)]
+impl Default for LineJoinStyle {
+    #[inline]
+    fn default() -> Self {
+        Self::Round
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 pub enum AudioCompression {
     UncompressedUnknownEndian = 0,
     Adpcm = 1,
@@ -1119,7 +1357,7 @@ impl AudioCompression {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SoundFormat {
     pub compression: AudioCompression,
     pub sample_rate: u16,
@@ -1127,7 +1365,7 @@ pub struct SoundFormat {
     pub is_16_bit: bool,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SoundStreamHead {
     pub stream_format: SoundFormat,
     pub playback_format: SoundFormat,
@@ -1137,7 +1375,7 @@ pub struct SoundStreamHead {
 
 pub type SoundStreamBlock<'a> = &'a [u8];
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Button<'a> {
     pub id: CharacterId,
     pub is_track_as_menu: bool,
@@ -1145,7 +1383,7 @@ pub struct Button<'a> {
     pub actions: Vec<ButtonAction<'a>>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ButtonRecord {
     pub states: ButtonState,
     pub id: CharacterId,
@@ -1165,13 +1403,13 @@ bitflags! {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ButtonColorTransform {
     pub id: CharacterId,
     pub color_transforms: Vec<ColorTransform>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ButtonSounds {
     pub id: CharacterId,
     pub over_to_up_sound: Option<ButtonSound>,
@@ -1182,7 +1420,7 @@ pub struct ButtonSounds {
 
 pub type ButtonSound = (CharacterId, SoundInfo);
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ButtonAction<'a> {
     pub conditions: ButtonActionCondition,
     pub key_code: Option<u8>,
@@ -1204,7 +1442,7 @@ bitflags! {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DefineMorphShape {
     pub version: u8,
     pub id: CharacterId,
@@ -1214,7 +1452,7 @@ pub struct DefineMorphShape {
     pub end: MorphShape,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MorphShape {
     pub shape_bounds: Rectangle,
     pub edge_bounds: Rectangle,
@@ -1223,13 +1461,13 @@ pub struct MorphShape {
     pub shape: Vec<ShapeRecord>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FontV1 {
     pub id: CharacterId,
     pub glyphs: Vec<Vec<ShapeRecord>>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Font<'a> {
     pub version: u8,
     pub id: CharacterId,
@@ -1237,14 +1475,23 @@ pub struct Font<'a> {
     pub language: Language,
     pub layout: Option<FontLayout>,
     pub glyphs: Vec<Glyph>,
-    pub is_small_text: bool,
-    pub is_shift_jis: bool, // TODO(Herschel): Use enum for Shift-JIS/ANSI/UCS-2
-    pub is_ansi: bool,
-    pub is_bold: bool,
-    pub is_italic: bool,
+    pub flags: FontFlag,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+bitflags! {
+    pub struct FontFlag: u8 {
+        const IS_BOLD = 1 << 0;
+        const IS_ITALIC = 1 << 1;
+        const HAS_WIDE_CODES = 1 << 2;
+        const HAS_WIDE_OFFSETS = 1 << 3;
+        const IS_ANSI = 1 << 4;
+        const IS_SMALL_TEXT = 1 << 5;
+        const IS_SHIFT_JIS = 1 << 6;
+        const HAS_LAYOUT = 1 << 7;
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Font4<'a> {
     pub id: CharacterId,
     pub is_italic: bool,
@@ -1253,11 +1500,11 @@ pub struct Font4<'a> {
     pub data: Option<&'a [u8]>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Glyph {
     pub shape_records: Vec<ShapeRecord>,
     pub code: u16,
-    pub advance: Option<i16>,
+    pub advance: i16,
     pub bounds: Option<Rectangle>,
 }
 
@@ -1276,21 +1523,34 @@ pub struct KerningRecord {
     pub adjustment: Twips,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FontInfo<'a> {
     pub id: CharacterId,
     pub version: u8,
     pub name: &'a SwfStr,
-    pub is_small_text: bool,
-    pub is_shift_jis: bool,
-    pub is_ansi: bool,
-    pub is_bold: bool,
-    pub is_italic: bool,
+    pub flags: FontInfoFlag,
     pub language: Language,
     pub code_table: Vec<u16>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+bitflags! {
+    pub struct FontInfoFlag: u8 {
+        const HAS_WIDE_CODES = 1 << 0;
+        const IS_BOLD = 1 << 1;
+        const IS_ITALIC = 1 << 2;
+        const IS_SHIFT_JIS = 1 << 3;
+        const IS_ANSI = 1 << 4;
+        const IS_SMALL_TEXT = 1 << 5;
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DefineBinaryData<'a> {
+    pub id: CharacterId,
+    pub data: &'a [u8],
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Text {
     pub id: CharacterId,
     pub bounds: Rectangle,
@@ -1298,7 +1558,7 @@ pub struct Text {
     pub records: Vec<TextRecord>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TextRecord {
     pub font_id: Option<CharacterId>,
     pub color: Option<Color>,
@@ -1308,13 +1568,13 @@ pub struct TextRecord {
     pub glyphs: Vec<GlyphEntry>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GlyphEntry {
     pub index: u32,
     pub advance: i32,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EditText<'a> {
     pub id: CharacterId,
     pub bounds: Rectangle,
@@ -1338,7 +1598,7 @@ pub struct EditText<'a> {
     pub is_device_font: bool,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TextLayout {
     pub align: TextAlign,
     pub left_margin: Twips,
@@ -1347,7 +1607,7 @@ pub struct TextLayout {
     pub leading: Twips,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, FromPrimitive)]
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 pub enum TextAlign {
     Left = 0,
     Right = 1,
@@ -1361,7 +1621,7 @@ impl TextAlign {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FontAlignZone {
     // TODO(Herschel): Read these as f16s.
     pub left: i16,
@@ -1370,7 +1630,7 @@ pub struct FontAlignZone {
     pub height: i16,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, FromPrimitive)]
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 pub enum FontThickness {
     Thin = 0,
     Medium = 1,
@@ -1392,7 +1652,7 @@ pub struct CsmTextSettings {
     pub sharpness: f32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, FromPrimitive)]
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 pub enum TextGridFit {
     None = 0,
     Pixel = 1,
@@ -1405,7 +1665,7 @@ impl TextGridFit {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DefineBitsLossless<'a> {
     pub version: u8,
     pub id: CharacterId,
@@ -1415,14 +1675,14 @@ pub struct DefineBitsLossless<'a> {
     pub data: &'a [u8],
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BitmapFormat {
     ColorMap8 { num_colors: u8 },
     Rgb15,
     Rgb32,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DefineVideoStream {
     pub id: CharacterId,
     pub num_frames: u16,
@@ -1433,7 +1693,7 @@ pub struct DefineVideoStream {
     pub codec: VideoCodec,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, FromPrimitive)]
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 pub enum VideoDeblocking {
     UseVideoPacketValue = 0,
     None = 1,
@@ -1449,7 +1709,7 @@ impl VideoDeblocking {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, FromPrimitive)]
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 pub enum VideoCodec {
     H263 = 2,
     ScreenVideo = 3,
@@ -1464,14 +1724,14 @@ impl VideoCodec {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VideoFrame<'a> {
     pub stream_id: CharacterId,
     pub frame_num: u16,
     pub data: &'a [u8],
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DefineBitsJpeg3<'a> {
     pub id: CharacterId,
     pub version: u8,
@@ -1480,7 +1740,7 @@ pub struct DefineBitsJpeg3<'a> {
     pub alpha_data: &'a [u8],
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DoAbc<'a> {
     pub name: &'a SwfStr,
     pub is_lazy_initialize: bool,
@@ -1494,7 +1754,7 @@ pub type JpegTables<'a> = &'a [u8];
 /// `ProductInfo` contains information about the software used to generate the SWF.
 /// Not documented in the SWF19 reference. Emitted by mxmlc.
 /// See http://wahlers.com.br/claus/blog/undocumented-swf-tags-written-by-mxmlc/
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProductInfo {
     pub product_id: u32,
     pub edition: u32,

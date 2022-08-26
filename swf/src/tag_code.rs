@@ -1,7 +1,4 @@
-#![allow(clippy::useless_attribute)]
-
-#[allow(dead_code)]
-#[derive(Debug, PartialEq, Clone, Copy, FromPrimitive)]
+#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 pub enum TagCode {
     End = 0,
     ShowFrame = 1,
@@ -94,5 +91,13 @@ pub enum TagCode {
 impl TagCode {
     pub fn from_u16(n: u16) -> Option<Self> {
         num_traits::FromPrimitive::from_u16(n)
+    }
+
+    pub fn format(tag_code: u16) -> String {
+        if let Some(tag_code) = TagCode::from_u16(tag_code) {
+            format!("{:?}", tag_code)
+        } else {
+            format!("Unknown({})", tag_code)
+        }
     }
 }

@@ -3,7 +3,6 @@ use md5::Digest;
 use rand::rngs::SmallRng;
 use rand::{Rng, RngCore, SeedableRng, thread_rng};
 use ruffle_core::backend::audio::NullAudioBackend;
-use ruffle_core::backend::locale::NullLocaleBackend;
 use ruffle_core::backend::log::LogBackend;
 use ruffle_core::backend::navigator::NullNavigatorBackend;
 use ruffle_core::backend::render::NullRenderer;
@@ -21,6 +20,8 @@ use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
+use log::{info, warn};
+use ruffle_core::external::{ExternalInterfaceMethod, ExternalInterfaceProvider};
 use subprocess::{Exec, Redirection};
 use swf::avm1::types::{Action, Value};
 use swf::{Compression, Header, Rectangle, SwfStr, Tag, Twips};
@@ -166,28 +167,33 @@ impl LogBackend for StringLogger {
         st.push_str(message);
         st.push('\n');
     }
+    fn __fuzz__get_log_string(&self) -> String {
+        self.msgs.borrow().to_string()
+    }
 }
 
 async fn open_ruffle(bytes: Vec<u8>) -> Result<(String, Duration), MyError> {
     let ruffle_start = Instant::now();
 
     let movie = SwfMovie::from_data(&bytes, None, None).expect("Load movie fail");
-    let log = Box::new(StringLogger::default());
-    let player = ruffle_core::Player::new(
-        Box::new(NullRenderer::default()),
-        Box::new(NullAudioBackend::default()),
-        Box::new(NullNavigatorBackend::default()),
-        Box::new(MemoryStorageBackend::default()),
-        Box::new(NullLocaleBackend::default()),
-        Box::new(NullVideoBackend::default()),
-        log,
-        Box::new(NullUiBackend::new()),
-    )
-    .expect("Failed to mk player");
+    let log = StringLogger::default();
+
+    let player = ruffle_core::PlayerBuilder::new()
+        .with_renderer(NullRenderer::default())
+        .with_audio(NullAudioBackend::default())
+        .with_navigator(NullNavigatorBackend::default())
+        .with_storage(MemoryStorageBackend::default())
+        .with_video(NullVideoBackend::default())
+        .with_log(log)
+        .with_ui(NullUiBackend::new())
+        .build();
+
+
     let mut lock = player.lock().unwrap();
-    lock.set_root_movie(Arc::new(movie));
+    lock.set_root_movie(movie);
     lock.set_is_playing(true);
     drop(lock);
+
 
     loop {
         let mut lock = player.lock().unwrap();
@@ -199,16 +205,14 @@ async fn open_ruffle(bytes: Vec<u8>) -> Result<(String, Duration), MyError> {
             break;
         }
 
-        let lb = lock.log_backend().downcast_ref::<StringLogger>().unwrap();
-        let out = lb.msgs.clone().borrow().clone();
+        let out = lock.log_backend().__fuzz__get_log_string();
         if out.contains("#CASE_") {
             lock.set_is_playing(false);
         }
     }
 
     let lock = player.lock().unwrap();
-    let lb = lock.log_backend().downcast_ref::<StringLogger>().unwrap();
-    let out = lb.msgs.clone().borrow().clone();
+    let out = lock.log_backend().__fuzz__get_log_string();
     Ok((out, Instant::now() - ruffle_start))
 }
 
@@ -228,8 +232,9 @@ fn fuzz(shared_state: Arc<SharedFuzzState>) -> Result<(), Box<dyn Error>> {
         let start = Instant::now();
         // Keep generating until we produce a unique swf
         let mut warning_shown = false;
-        swf_content.clear();
         let swf_md5 = loop {
+            swf_content.clear();
+
             swf_generator.next_swf(&mut swf_content)?;
             let swf_md5 = md5::compute(&swf_content);
             // If its unique

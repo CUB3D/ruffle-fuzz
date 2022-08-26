@@ -1,4 +1,4 @@
-#![allow(clippy::inconsistent_digit_grouping, clippy::unreadable_literal)]
+#![allow(clippy::unusual_byte_groupings)]
 
 use crate::avm1::types::*;
 use crate::avm2::read::tests::read_abc_from_file;
@@ -41,10 +41,10 @@ pub fn tag_tests() -> Vec<TagTestData> {
         ),
         (
             9, // Minimum version not listed in SWF19.
-            Tag::DefineBinaryData {
+            Tag::DefineBinaryData(DefineBinaryData {
                 id: 1,
                 data: &[84, 101, 115, 116, 105, 110, 103, 33],
-            },
+            }),
             read_tag_bytes_from_file("tests/swfs/DefineBinaryData.swf", TagCode::DefineBinaryData),
         ),
         (
@@ -405,13 +405,13 @@ pub fn tag_tests() -> Vec<TagTestData> {
                 id: 1,
                 glyphs: vec![
                     vec![
-                        ShapeRecord::StyleChange(StyleChangeData {
+                        ShapeRecord::StyleChange(Box::new(StyleChangeData {
                             move_to: Some((Twips::from_pixels(19.45), Twips::from_pixels(-14.0))),
                             fill_style_0: None,
                             fill_style_1: Some(1),
                             line_style: Some(0),
                             new_styles: None,
-                        }),
+                        })),
                         ShapeRecord::StraightEdge {
                             delta_x: Twips::from_pixels(-15.6),
                             delta_y: Twips::from_pixels(0.0),
@@ -430,13 +430,13 @@ pub fn tag_tests() -> Vec<TagTestData> {
                         },
                     ],
                     vec![
-                        ShapeRecord::StyleChange(StyleChangeData {
+                        ShapeRecord::StyleChange(Box::new(StyleChangeData {
                             move_to: Some((Twips::from_pixels(32.65), Twips::from_pixels(7.5))),
                             fill_style_0: None,
                             fill_style_1: Some(1),
                             line_style: Some(0),
                             new_styles: None,
-                        }),
+                        })),
                         ShapeRecord::StraightEdge {
                             delta_x: Twips::from_pixels(-32.75),
                             delta_y: Twips::from_pixels(0.0),
@@ -466,11 +466,7 @@ pub fn tag_tests() -> Vec<TagTestData> {
                 version: 2,
                 id: 1,
                 name: "Verdana".to_string(),
-                is_small_text: false,
-                is_ansi: true,
-                is_shift_jis: false,
-                is_italic: false,
-                is_bold: false,
+                flags: FontFlag::IS_ANSI,
                 language: Language::Unknown,
                 layout: None,
                 glyphs: vec![],
@@ -509,24 +505,24 @@ pub fn tag_tests() -> Vec<TagTestData> {
                             y_max: 0.0,
                         }),
                         shape_records: vec![
-                            ShapeRecord::StyleChange(StyleChangeData {
+                            ShapeRecord::StyleChange(Box::new(StyleChangeData {
                                 move_to: Some((12.9, -37.2)),
                                 fill_style_0: Some(1),
                                 fill_style_1: None,
                                 line_style: None,
                                 new_styles: None
-                            }),
+                            })),
                             ShapeRecord::StraightEdge { delta_x: -0.65, delta_y: 26.95 },
                             ShapeRecord::StraightEdge { delta_x: -4.25, delta_y: 0.0 },
                             ShapeRecord::StraightEdge { delta_x: -0.7, delta_y: -26.95 },
                             ShapeRecord::StraightEdge { delta_x: 5.6, delta_y: 0.0 },
-                            ShapeRecord::StyleChange(StyleChangeData {
+                            ShapeRecord::StyleChange(Box::new(StyleChangeData {
                                 move_to: Some((12.65, 0.0)),
                                 fill_style_0: None,
                                 fill_style_1: None,
                                 line_style: None,
                                 new_styles: None
-                            }),
+                            })),
                             ShapeRecord::StraightEdge { delta_x: -5.1, delta_y: 0.0 },
                             ShapeRecord::StraightEdge { delta_x: 0.0, delta_y: -5.25 },
                             ShapeRecord::StraightEdge { delta_x: 5.1, delta_y: 0.0 },
@@ -544,11 +540,7 @@ pub fn tag_tests() -> Vec<TagTestData> {
                 version: 3,
                 id: 1,
                 name: "Dummy\u{0}".to_string(), // TODO(Herschel): Extra null byte?
-                is_small_text: false,
-                is_ansi: false,
-                is_shift_jis: false,
-                is_italic: false,
-                is_bold: false,
+                flags: FontFlag::empty(),
                 language: Language::Latin,
                 layout: Some(FontLayout {
                     ascent: 17160,
@@ -564,13 +556,13 @@ pub fn tag_tests() -> Vec<TagTestData> {
                 glyphs: vec![
                     Glyph {
                         shape_records: vec![
-                            ShapeRecord::StyleChange(StyleChangeData {
+                            ShapeRecord::StyleChange(Box::new(StyleChangeData {
                                 move_to: Some((205.5, -527.5)),
                                 fill_style_0: Some(1),
                                 fill_style_1: None,
                                 line_style: None,
                                 new_styles: None }
-                            ),
+                            )),
                             ShapeRecord::StraightEdge { delta_x: 371.0, delta_y: 0.0 },
                             ShapeRecord::StraightEdge { delta_x: 0.0, delta_y: 65.0 },
                             ShapeRecord::StraightEdge { delta_x: -371.0, delta_y: 0.0 },
@@ -582,13 +574,13 @@ pub fn tag_tests() -> Vec<TagTestData> {
                     },
                     Glyph {
                         shape_records: vec![
-                            ShapeRecord::StyleChange(StyleChangeData {
+                            ShapeRecord::StyleChange(Box::new(StyleChangeData {
                                 move_to: Some((249.0, -694.0)),
                                 fill_style_0: Some(1),
                                 fill_style_1: None,
                                 line_style: None,
                                 new_styles: None
-                            }),
+                            })),
                             ShapeRecord::StraightEdge { delta_x: 135.5, delta_y: 0.0 },
                             ShapeRecord::StraightEdge { delta_x: 0.0, delta_y: 660.5 },
                             ShapeRecord::StraightEdge { delta_x: -135.5, delta_y: 0.0 },
@@ -610,11 +602,7 @@ pub fn tag_tests() -> Vec<TagTestData> {
                 version: 3,
                 id: 1,
                 name: "_sans",
-                is_small_text: false,
-                is_ansi: false,
-                is_shift_jis: false,
-                is_italic: false,
-                is_bold: false,
+                flags: FontFlag::empty(),
                 language: Language::Latin,
                 layout: None,
                 glyphs: vec![],
@@ -667,11 +655,7 @@ pub fn tag_tests() -> Vec<TagTestData> {
                 id: 1,
                 version: 1,
                 name: SwfStr::from_str_with_encoding("Verdana", WINDOWS_1252).unwrap(),
-                is_small_text: false,
-                is_ansi: true,
-                is_shift_jis: false,
-                is_italic: false,
-                is_bold: false,
+                flags: FontInfoFlag::IS_ANSI,
                 language: Language::Unknown,
                 code_table: vec![45, 95],
             })),
@@ -683,11 +667,10 @@ pub fn tag_tests() -> Vec<TagTestData> {
                 id: 1,
                 version: 2,
                 name: "Verdana".into(),
-                is_small_text: false,
-                is_ansi: true,
-                is_shift_jis: false,
-                is_italic: true,
-                is_bold: true,
+                flags: FontInfoFlag::HAS_WIDE_CODES
+                    | FontInfoFlag::IS_BOLD
+                    | FontInfoFlag::IS_ITALIC
+                    | FontInfoFlag::IS_ANSI,
                 language: Language::Latin,
                 code_table: vec![45, 95],
             })),
@@ -754,23 +737,17 @@ pub fn tag_tests() -> Vec<TagTestData> {
                             },
                         ],
                     })],
-                    line_styles: vec![LineStyle::new_v1(
-                        Twips::from_pixels(10.0),
-                        Color {
-                            r: 0,
-                            g: 255,
-                            b: 0,
-                            a: 255,
-                        },
-                    )],
+                    line_styles: vec![LineStyle::new()
+                        .with_width(Twips::from_pixels(10.0))
+                        .with_color(Color::from_rgba(0xff00ff00))],
                     shape: vec![
-                        ShapeRecord::StyleChange(StyleChangeData {
+                        ShapeRecord::StyleChange(Box::new(StyleChangeData {
                             move_to: Some((Twips::from_pixels(20.0), Twips::from_pixels(20.0))),
                             fill_style_0: None,
                             fill_style_1: None,
                             line_style: Some(1),
                             new_styles: None,
-                        }),
+                        })),
                         ShapeRecord::StraightEdge {
                             delta_x: Twips::from_pixels(40.0),
                             delta_y: Twips::from_pixels(0.0),
@@ -787,13 +764,13 @@ pub fn tag_tests() -> Vec<TagTestData> {
                             delta_x: Twips::from_pixels(0.0),
                             delta_y: Twips::from_pixels(-40.0),
                         },
-                        ShapeRecord::StyleChange(StyleChangeData {
+                        ShapeRecord::StyleChange(Box::new(StyleChangeData {
                             move_to: None,
                             fill_style_0: Some(1),
                             fill_style_1: None,
                             line_style: None,
                             new_styles: None,
-                        }),
+                        })),
                         ShapeRecord::StraightEdge {
                             delta_x: Twips::from_pixels(40.0),
                             delta_y: Twips::from_pixels(0.0),
@@ -857,23 +834,17 @@ pub fn tag_tests() -> Vec<TagTestData> {
                             },
                         ],
                     })],
-                    line_styles: vec![LineStyle::new_v1(
-                        Twips::from_pixels(2.0),
-                        Color {
-                            r: 255,
-                            g: 255,
-                            b: 0,
-                            a: 255,
-                        },
-                    )],
+                    line_styles: vec![LineStyle::new()
+                        .with_width(Twips::from_pixels(2.0))
+                        .with_color(Color::from_rgba(0xffffff00))],
                     shape: vec![
-                        ShapeRecord::StyleChange(StyleChangeData {
+                        ShapeRecord::StyleChange(Box::new(StyleChangeData {
                             move_to: Some((Twips::from_pixels(20.0), Twips::from_pixels(60.0))),
                             fill_style_0: None,
                             fill_style_1: None,
                             line_style: None,
                             new_styles: None,
-                        }),
+                        })),
                         ShapeRecord::StraightEdge {
                             delta_x: Twips::from_pixels(17.4),
                             delta_y: Twips::from_pixels(-50.65),
@@ -986,31 +957,17 @@ pub fn tag_tests() -> Vec<TagTestData> {
                         },
                         focal_point: Fixed8::from_f64(0.97265625),
                     }],
-                    line_styles: vec![LineStyle {
-                        width: Twips::from_pixels(10.0),
-                        color: Color {
-                            r: 0,
-                            g: 255,
-                            b: 0,
-                            a: 255,
-                        },
-                        start_cap: LineCapStyle::Round,
-                        end_cap: LineCapStyle::Round,
-                        join_style: LineJoinStyle::Round,
-                        fill_style: None,
-                        allow_scale_x: true,
-                        allow_scale_y: true,
-                        is_pixel_hinted: false,
-                        allow_close: true,
-                    }],
+                    line_styles: vec![LineStyle::new()
+                        .with_width(Twips::from_pixels(10.0))
+                        .with_color(Color::from_rgba(0xff00ff00))],
                     shape: vec![
-                        ShapeRecord::StyleChange(StyleChangeData {
+                        ShapeRecord::StyleChange(Box::new(StyleChangeData {
                             move_to: Some((Twips::from_pixels(20.0), Twips::from_pixels(20.0))),
                             fill_style_0: None,
                             fill_style_1: None,
                             line_style: Some(1),
                             new_styles: None,
-                        }),
+                        })),
                         ShapeRecord::StraightEdge {
                             delta_x: Twips::from_pixels(200.0),
                             delta_y: Twips::from_pixels(0.0),
@@ -1027,13 +984,13 @@ pub fn tag_tests() -> Vec<TagTestData> {
                             delta_x: Twips::from_pixels(0.0),
                             delta_y: Twips::from_pixels(-200.0),
                         },
-                        ShapeRecord::StyleChange(StyleChangeData {
+                        ShapeRecord::StyleChange(Box::new(StyleChangeData {
                             move_to: None,
                             fill_style_0: Some(1),
                             fill_style_1: None,
                             line_style: None,
                             new_styles: None,
-                        }),
+                        })),
                         ShapeRecord::StraightEdge {
                             delta_x: Twips::from_pixels(200.0),
                             delta_y: Twips::from_pixels(0.0),
@@ -1109,31 +1066,17 @@ pub fn tag_tests() -> Vec<TagTestData> {
                         },
                         focal_point: Fixed8::from_f64(-0.9921875),
                     }],
-                    line_styles: vec![LineStyle {
-                        width: Twips::from_pixels(2.0),
-                        color: Color {
-                            r: 255,
-                            g: 255,
-                            b: 0,
-                            a: 255,
-                        },
-                        start_cap: LineCapStyle::Round,
-                        end_cap: LineCapStyle::Round,
-                        join_style: LineJoinStyle::Round,
-                        fill_style: None,
-                        allow_scale_x: true,
-                        allow_scale_y: true,
-                        is_pixel_hinted: false,
-                        allow_close: true,
-                    }],
+                    line_styles: vec![LineStyle::new()
+                        .with_width(Twips::from_pixels(2.0))
+                        .with_color(Color::from_rgba(0xffffff00))],
                     shape: vec![
-                        ShapeRecord::StyleChange(StyleChangeData {
+                        ShapeRecord::StyleChange(Box::new(StyleChangeData {
                             move_to: Some((Twips::from_pixels(26.0), Twips::from_pixels(147.35))),
                             fill_style_0: None,
                             fill_style_1: None,
                             line_style: None,
                             new_styles: None,
-                        }),
+                        })),
                         ShapeRecord::StraightEdge {
                             delta_x: Twips::from_pixels(95.0),
                             delta_y: Twips::from_pixels(-131.0),
@@ -1234,31 +1177,17 @@ pub fn tag_tests() -> Vec<TagTestData> {
                             },
                         ],
                     })],
-                    line_styles: vec![LineStyle {
-                        width: Twips::from_pixels(0.0),
-                        color: Color {
-                            r: 0,
-                            g: 0,
-                            b: 0,
-                            a: 0,
-                        },
-                        start_cap: LineCapStyle::Round,
-                        end_cap: LineCapStyle::Round,
-                        join_style: LineJoinStyle::Round,
-                        fill_style: None,
-                        allow_scale_x: true,
-                        allow_scale_y: true,
-                        is_pixel_hinted: false,
-                        allow_close: true,
-                    }],
+                    line_styles: vec![LineStyle::new()
+                        .with_width(Twips::ZERO)
+                        .with_color(Color::from_rgba(0x00000000))],
                     shape: vec![
-                        ShapeRecord::StyleChange(StyleChangeData {
+                        ShapeRecord::StyleChange(Box::new(StyleChangeData {
                             move_to: None,
                             fill_style_0: Some(1),
                             fill_style_1: None,
                             line_style: Some(1),
                             new_styles: None,
-                        }),
+                        })),
                         ShapeRecord::StraightEdge {
                             delta_x: Twips::from_pixels(200.0),
                             delta_y: Twips::from_pixels(0.0),
@@ -1322,23 +1251,9 @@ pub fn tag_tests() -> Vec<TagTestData> {
                             },
                         ],
                     })],
-                    line_styles: vec![LineStyle {
-                        width: Twips::from_pixels(0.0),
-                        color: Color {
-                            r: 0,
-                            g: 0,
-                            b: 0,
-                            a: 0,
-                        },
-                        start_cap: LineCapStyle::Round,
-                        end_cap: LineCapStyle::Round,
-                        join_style: LineJoinStyle::Round,
-                        fill_style: None,
-                        allow_scale_x: true,
-                        allow_scale_y: true,
-                        is_pixel_hinted: false,
-                        allow_close: true,
-                    }],
+                    line_styles: vec![LineStyle::new()
+                        .with_width(Twips::from_pixels(0.0))
+                        .with_color(Color::from_rgba(0x00000000))],
                     shape: vec![
                         ShapeRecord::StraightEdge {
                             delta_x: Twips::from_pixels(200.0),
@@ -1451,13 +1366,13 @@ pub fn tag_tests() -> Vec<TagTestData> {
                     line_styles: vec![],
                 },
                 shape: vec![
-                    ShapeRecord::StyleChange(StyleChangeData {
+                    ShapeRecord::StyleChange(Box::new(StyleChangeData {
                         move_to: None,
                         fill_style_0: None,
                         fill_style_1: Some(1),
                         line_style: None,
                         new_styles: None,
-                    }),
+                    })),
                     ShapeRecord::StraightEdge {
                         delta_x: Twips::from_pixels(20.0),
                         delta_y: Twips::from_pixels(0.0),
@@ -1534,13 +1449,13 @@ pub fn tag_tests() -> Vec<TagTestData> {
                     line_styles: vec![],
                 },
                 shape: vec![
-                    ShapeRecord::StyleChange(StyleChangeData {
+                    ShapeRecord::StyleChange(Box::new(StyleChangeData {
                         move_to: Some((Twips::from_pixels(50.0), Twips::from_pixels(25.0))),
                         fill_style_0: None,
                         fill_style_1: Some(1),
                         line_style: None,
                         new_styles: None,
-                    }),
+                    })),
                     ShapeRecord::CurvedEdge {
                         control_delta_x: Twips::from_pixels(0.0),
                         control_delta_y: Twips::from_pixels(10.35),
@@ -1658,35 +1573,23 @@ pub fn tag_tests() -> Vec<TagTestData> {
                         },
                     ],
                     line_styles: vec![
-                        LineStyle {
-                            width: Twips::from_pixels(20.0),
-                            color: Color {
+                        LineStyle::new()
+                            .with_width(Twips::from_pixels(20.0))
+                            .with_color(Color {
                                 r: 0,
                                 g: 153,
                                 b: 0,
                                 a: 255,
-                            },
-                            start_cap: LineCapStyle::None,
-                            end_cap: LineCapStyle::None,
-                            join_style: LineJoinStyle::Bevel,
-                            fill_style: None,
-                            allow_scale_x: false,
-                            allow_scale_y: false,
-                            is_pixel_hinted: true,
-                            allow_close: true,
-                        },
-                        LineStyle {
-                            width: Twips::from_pixels(20.0),
-                            color: Color {
-                                r: 0,
-                                g: 0,
-                                b: 0,
-                                a: 0,
-                            },
-                            start_cap: LineCapStyle::Round,
-                            end_cap: LineCapStyle::Round,
-                            join_style: LineJoinStyle::Round,
-                            fill_style: Some(FillStyle::LinearGradient(Gradient {
+                            })
+                            .with_allow_scale_x(false)
+                            .with_allow_scale_y(false)
+                            .with_is_pixel_hinted(true)
+                            .with_join_style(LineJoinStyle::Bevel)
+                            .with_start_cap(LineCapStyle::None)
+                            .with_end_cap(LineCapStyle::None),
+                        LineStyle::new()
+                            .with_width(Twips::from_pixels(20.0))
+                            .with_fill_style(FillStyle::LinearGradient(Gradient {
                                 matrix: Matrix {
                                     tx: Twips::from_pixels(50.0),
                                     ty: Twips::from_pixels(50.0),
@@ -1717,39 +1620,30 @@ pub fn tag_tests() -> Vec<TagTestData> {
                                         },
                                     },
                                 ],
-                            })),
-                            allow_scale_x: true,
-                            allow_scale_y: false,
-                            is_pixel_hinted: true,
-                            allow_close: true,
-                        },
-                        LineStyle {
-                            width: Twips::from_pixels(20.0),
-                            color: Color {
+                            }))
+                            .with_allow_scale_y(false)
+                            .with_is_pixel_hinted(true),
+                        LineStyle::new()
+                            .with_width(Twips::from_pixels(20.0))
+                            .with_color(Color {
                                 r: 0,
                                 g: 153,
                                 b: 0,
                                 a: 255,
-                            },
-                            start_cap: LineCapStyle::Round,
-                            end_cap: LineCapStyle::Round,
-                            join_style: LineJoinStyle::Miter(Fixed8::from_f32(56.0)),
-                            fill_style: None,
-                            allow_scale_x: true,
-                            allow_scale_y: false,
-                            is_pixel_hinted: true,
-                            allow_close: true,
-                        },
+                            })
+                            .with_join_style(LineJoinStyle::Miter(Fixed8::from_f32(56.0)))
+                            .with_allow_scale_y(false)
+                            .with_is_pixel_hinted(true),
                     ],
                 },
                 shape: vec![
-                    ShapeRecord::StyleChange(StyleChangeData {
+                    ShapeRecord::StyleChange(Box::new(StyleChangeData {
                         move_to: Some((Twips::from_pixels(150.0), Twips::from_pixels(0.0))),
                         fill_style_0: None,
                         fill_style_1: Some(1),
                         line_style: Some(1),
                         new_styles: None,
-                    }),
+                    })),
                     ShapeRecord::StraightEdge {
                         delta_x: Twips::from_pixels(100.0),
                         delta_y: Twips::from_pixels(0.0),
@@ -1758,13 +1652,13 @@ pub fn tag_tests() -> Vec<TagTestData> {
                         delta_x: Twips::from_pixels(0.0),
                         delta_y: Twips::from_pixels(100.0),
                     },
-                    ShapeRecord::StyleChange(StyleChangeData {
+                    ShapeRecord::StyleChange(Box::new(StyleChangeData {
                         move_to: None,
                         fill_style_0: None,
                         fill_style_1: None,
                         line_style: Some(3),
                         new_styles: None,
-                    }),
+                    })),
                     ShapeRecord::StraightEdge {
                         delta_x: Twips::from_pixels(-100.0),
                         delta_y: Twips::from_pixels(0.0),
@@ -1773,13 +1667,13 @@ pub fn tag_tests() -> Vec<TagTestData> {
                         delta_x: Twips::from_pixels(0.0),
                         delta_y: Twips::from_pixels(-100.0),
                     },
-                    ShapeRecord::StyleChange(StyleChangeData {
+                    ShapeRecord::StyleChange(Box::new(StyleChangeData {
                         move_to: Some((Twips::from_pixels(100.0), Twips::from_pixels(50.0))),
                         fill_style_0: None,
                         fill_style_1: Some(2),
                         line_style: Some(2),
                         new_styles: None,
-                    }),
+                    })),
                     ShapeRecord::CurvedEdge {
                         control_delta_x: Twips::from_pixels(0.0),
                         control_delta_y: Twips::from_pixels(20.65),
@@ -2079,7 +1973,7 @@ pub fn tag_tests() -> Vec<TagTestData> {
                 background_color: None,
                 blend_mode: None,
                 clip_actions: None,
-                is_image: false,
+                has_image: false,
                 is_bitmap_cached: None,
                 is_visible: None,
                 amf_data: None,
@@ -2106,7 +2000,7 @@ pub fn tag_tests() -> Vec<TagTestData> {
                     key_code: None,
                     action_data: &[150, 6, 0, 0, 99, 108, 105, 112, 0, 38, 0],
                 }]),
-                is_image: false,
+                has_image: false,
                 is_bitmap_cached: None,
                 is_visible: None,
                 amf_data: None,
@@ -2148,7 +2042,7 @@ pub fn tag_tests() -> Vec<TagTestData> {
                         action_data: &[150, 3, 0, 0, 67, 0, 38, 0],
                     },
                 ]),
-                is_image: false,
+                has_image: false,
                 is_bitmap_cached: None,
                 is_visible: None,
                 amf_data: None,
@@ -2181,7 +2075,7 @@ pub fn tag_tests() -> Vec<TagTestData> {
                 background_color: None,
                 blend_mode: None,
                 clip_actions: None,
-                is_image: true,
+                has_image: true,
                 is_bitmap_cached: None,
                 is_visible: None,
                 amf_data: None,
@@ -2313,7 +2207,7 @@ pub fn tag_tests() -> Vec<TagTestData> {
                         action_data: &[150, 3, 0, 0, 66, 0, 38, 0],
                     },
                 ]),
-                is_image: false,
+                has_image: false,
                 is_bitmap_cached: Some(true),
                 is_visible: Some(false),
                 amf_data: None,
@@ -2347,7 +2241,7 @@ pub fn tag_tests() -> Vec<TagTestData> {
                 background_color: None,
                 blend_mode: None,
                 clip_actions: None,
-                is_image: false,
+                has_image: false,
                 is_bitmap_cached: None,
                 is_visible: None,
                 amf_data: Some(&[
@@ -2589,18 +2483,9 @@ pub fn tag_tests() -> Vec<TagTestData> {
                 has_scaling_strokes: true,
                 styles: ShapeStyles {
                     fill_styles: vec![],
-                    line_styles: vec![LineStyle {
-                        width: Twips::from_pixels(40.0),
-                        color: Color {
-                            r: 0,
-                            g: 0,
-                            b: 0,
-                            a: 0,
-                        },
-                        start_cap: LineCapStyle::Round,
-                        end_cap: LineCapStyle::Round,
-                        join_style: LineJoinStyle::Round,
-                        fill_style: Some(FillStyle::Bitmap {
+                    line_styles: vec![LineStyle::new()
+                        .with_width(Twips::from_pixels(40.0))
+                        .with_fill_style(FillStyle::Bitmap {
                             id: 1,
                             matrix: Matrix {
                                 a: Fixed16::from_f32(20.0),
@@ -2611,21 +2496,16 @@ pub fn tag_tests() -> Vec<TagTestData> {
                             },
                             is_smoothed: false,
                             is_repeating: true,
-                        }),
-                        allow_scale_x: true,
-                        allow_scale_y: true,
-                        is_pixel_hinted: false,
-                        allow_close: true,
-                    }],
+                        })],
                 },
                 shape: vec![
-                    ShapeRecord::StyleChange(StyleChangeData {
+                    ShapeRecord::StyleChange(Box::new(StyleChangeData {
                         move_to: None,
                         fill_style_0: None,
                         fill_style_1: None,
                         line_style: Some(1),
                         new_styles: None,
-                    }),
+                    })),
                     ShapeRecord::StraightEdge {
                         delta_x: Twips::from_pixels(200.0),
                         delta_y: Twips::from_pixels(0.0),
@@ -2648,55 +2528,53 @@ pub fn avm1_tests() -> Vec<Avm1TestData> {
         (4, Action::GetTime, vec![0x34]),
         (
             3,
-            Action::GetUrl {
+            Action::GetUrl(GetUrl {
                 url: SwfStr::from_str_with_encoding("a", WINDOWS_1252).unwrap(),
                 target: SwfStr::from_str_with_encoding("b", WINDOWS_1252).unwrap(),
-            },
+            }),
             vec![0x83, 4, 0, 97, 0, 98, 0],
         ),
         (
             4,
-            Action::GetUrl2 {
-                send_vars_method: SendVarsMethod::Post,
-                is_target_sprite: true,
-                is_load_vars: false,
-            },
+            Action::GetUrl2(GetUrl2::for_load_movie(SendVarsMethod::Post)),
             vec![0x9A, 1, 0, 0b01_0000_10],
         ),
         (
             4,
-            Action::GetUrl2 {
-                send_vars_method: SendVarsMethod::None,
-                is_target_sprite: true,
-                is_load_vars: false,
-            },
+            Action::GetUrl2(GetUrl2::for_load_movie(SendVarsMethod::None)),
             vec![0x9A, 1, 0, 0b01_0000_00],
         ),
         (4, Action::GetVariable, vec![0x1C]),
-        (3, Action::GotoFrame(11), vec![0x81, 2, 0, 11, 0]),
+        (
+            3,
+            Action::GotoFrame(GotoFrame { frame: 11 }),
+            vec![0x81, 2, 0, 11, 0],
+        ),
         (
             4,
-            Action::GotoFrame2 {
+            Action::GotoFrame2(GotoFrame2 {
                 set_playing: false,
                 scene_offset: 0,
-            },
+            }),
             vec![0x9F, 1, 0, 0],
         ),
         (
             4,
-            Action::GotoFrame2 {
+            Action::GotoFrame2(GotoFrame2 {
                 set_playing: true,
                 scene_offset: 259,
-            },
+            }),
             vec![0x9F, 3, 0, 0b11, 3, 1],
         ),
         (
             3,
-            Action::GotoLabel(SwfStr::from_str_with_encoding("testb", WINDOWS_1252).unwrap()),
+            Action::GotoLabel(GotoLabel {
+                label: SwfStr::from_str_with_encoding("testb", WINDOWS_1252).unwrap(),
+            }),
             vec![0x8C, 6, 0, 116, 101, 115, 116, 98, 0],
         ),
-        (4, Action::If { offset: 1 }, vec![0x9D, 2, 0, 1, 0]),
-        (4, Action::Jump { offset: 1 }, vec![0x99, 2, 0, 1, 0]),
+        (4, Action::If(If { offset: 1 }), vec![0x9D, 2, 0, 1, 0]),
+        (4, Action::Jump(Jump { offset: 1 }), vec![0x99, 2, 0, 1, 0]),
         (4, Action::Less, vec![0x0F]),
         (4, Action::MBAsciiToChar, vec![0x37]),
         (4, Action::MBCharToAscii, vec![0x36]),
@@ -2712,72 +2590,110 @@ pub fn avm1_tests() -> Vec<Avm1TestData> {
         (3, Action::PreviousFrame, vec![0x05]),
         (
             4,
-            Action::Push(vec![Value::Str(
-                SwfStr::from_str_with_encoding("test", WINDOWS_1252).unwrap(),
-            )]),
+            Action::Push(Push {
+                values: vec![Value::Str(
+                    SwfStr::from_str_with_encoding("test", WINDOWS_1252).unwrap(),
+                )],
+            }),
             vec![0x96, 6, 0, 0, 116, 101, 115, 116, 0],
         ),
         (
             4,
-            Action::Push(vec![Value::Float(0.0)]),
+            Action::Push(Push {
+                values: vec![Value::Float(0.0)],
+            }),
             vec![0x96, 5, 0, 1, 0, 0, 0, 0],
         ),
         (
             5,
-            Action::Push(vec![Value::Double(1.5)]),
+            Action::Push(Push {
+                values: vec![Value::Double(1.5)],
+            }),
             vec![0x96, 9, 0, 6, 0, 0, 248, 63, 0, 0, 0, 0],
         ),
-        (5, Action::Push(vec![Value::Null]), vec![0x96, 1, 0, 2]),
-        (5, Action::Push(vec![Value::Undefined]), vec![0x96, 1, 0, 3]),
         (
             5,
-            Action::Push(vec![Value::Null, Value::Undefined]),
+            Action::Push(Push {
+                values: vec![Value::Null],
+            }),
+            vec![0x96, 1, 0, 2],
+        ),
+        (
+            5,
+            Action::Push(Push {
+                values: vec![Value::Undefined],
+            }),
+            vec![0x96, 1, 0, 3],
+        ),
+        (
+            5,
+            Action::Push(Push {
+                values: vec![Value::Null, Value::Undefined],
+            }),
             vec![0x96, 2, 0, 2, 3],
         ),
         (
             5,
-            Action::Push(vec![Value::Register(1)]),
+            Action::Push(Push {
+                values: vec![Value::Register(1)],
+            }),
             vec![0x96, 2, 0, 4, 1],
         ),
         (
             5,
-            Action::Push(vec![Value::Bool(false)]),
+            Action::Push(Push {
+                values: vec![Value::Bool(false)],
+            }),
             vec![0x96, 2, 0, 5, 0],
         ),
         (
             5,
-            Action::Push(vec![Value::Bool(true)]),
+            Action::Push(Push {
+                values: vec![Value::Bool(true)],
+            }),
             vec![0x96, 2, 0, 5, 1],
         ),
         (
             5,
-            Action::Push(vec![Value::Double(0.0)]),
+            Action::Push(Push {
+                values: vec![Value::Double(0.0)],
+            }),
             vec![0x96, 9, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0],
         ),
         (
             5,
-            Action::Push(vec![Value::Int(31)]),
+            Action::Push(Push {
+                values: vec![Value::Int(31)],
+            }),
             vec![0x96, 5, 0, 7, 31, 0, 0, 0],
         ),
         (
             5,
-            Action::Push(vec![Value::Int(-50)]),
+            Action::Push(Push {
+                values: vec![Value::Int(-50)],
+            }),
             vec![0x96, 5, 0, 7, 206, 255, 255, 255],
         ),
         (
             5,
-            Action::Push(vec![Value::ConstantPool(77)]),
+            Action::Push(Push {
+                values: vec![Value::ConstantPool(77)],
+            }),
             vec![0x96, 2, 0, 8, 77],
         ),
         (
             5,
-            Action::Push(vec![Value::ConstantPool(257)]),
+            Action::Push(Push {
+                values: vec![Value::ConstantPool(257)],
+            }),
             vec![0x96, 3, 0, 9, 1, 1],
         ),
         (4, Action::RandomNumber, vec![0x30]),
         (
             3,
-            Action::SetTarget(SwfStr::from_str_with_encoding("test", WINDOWS_1252).unwrap()),
+            Action::SetTarget(SetTarget {
+                target: SwfStr::from_str_with_encoding("test", WINDOWS_1252).unwrap(),
+            }),
             vec![0x8B, 5, 0, 116, 101, 115, 116, 0],
         ),
         (4, Action::SetVariable, vec![0x1D]),
@@ -2794,38 +2710,38 @@ pub fn avm1_tests() -> Vec<Avm1TestData> {
         (4, Action::Trace, vec![0x26]),
         (
             3,
-            Action::WaitForFrame {
+            Action::WaitForFrame(WaitForFrame {
                 frame: 4,
                 num_actions_to_skip: 10,
-            },
+            }),
             vec![0x8A, 3, 0, 4, 0, 10],
         ),
         (
             4,
-            Action::WaitForFrame2 {
+            Action::WaitForFrame2(WaitForFrame2 {
                 num_actions_to_skip: 34,
-            },
+            }),
             vec![0x8D, 1, 0, 34],
         ),
         (
             1,
-            Action::Unknown {
+            Action::Unknown(Unknown {
                 opcode: 0x79,
                 data: &[],
-            },
+            }),
             vec![0x79],
         ),
         (
             1,
-            Action::Unknown {
+            Action::Unknown(Unknown {
                 opcode: 0xA0,
                 data: &[2, 3],
-            },
+            }),
             vec![0xA0, 2, 0, 2, 3],
         ),
         (
             5,
-            Action::DefineFunction {
+            Action::DefineFunction(DefineFunction {
                 name: SwfStr::from_str_with_encoding("cliche", WINDOWS_1252).unwrap(),
                 params: vec![
                     SwfStr::from_str_with_encoding("greeting", WINDOWS_1252).unwrap(),
@@ -2836,7 +2752,7 @@ pub fn avm1_tests() -> Vec<Avm1TestData> {
                     0x1c, 0x96, 0x03, 0x00, 0x00, 0x20, 0x00, 0x47, 0x96, 0x06, 0x00, 0x00, 0x6e,
                     0x61, 0x6d, 0x65, 0x00, 0x1c, 0x47, 0x3e,
                 ],
-            },
+            }),
             vec![
                 0x9b, 0x19, 0x00, 0x63, 0x6c, 0x69, 0x63, 0x68, 0x65, 0x00, 0x02, 0x00, 0x67, 0x72,
                 0x65, 0x65, 0x74, 0x69, 0x6e, 0x67, 0x00, 0x6e, 0x61, 0x6d, 0x65, 0x00, 0x21, 0x00,
@@ -2854,7 +2770,7 @@ pub fn avm2_tests() -> Vec<Avm2TestData> {
         AbcFile {
             major_version: 46,
             minor_version: 16,
-            constant_pool: ConstantPool {
+            constant_pool: crate::avm2::types::ConstantPool {
                 ints: vec![],
                 uints: vec![],
                 doubles: vec![],

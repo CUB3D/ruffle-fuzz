@@ -35,36 +35,36 @@ impl<'a> Reader<'a> {
         let constant_pool = self.read_constant_pool()?;
 
         let len = self.read_u30()?;
-        let mut methods = vec![];
+        let mut methods = Vec::with_capacity(len as usize);
         for _ in 0..len {
             methods.push(self.read_method()?);
         }
 
-        let len = self.read_u30()? as usize;
-        let mut metadata = Vec::with_capacity(len);
+        let len = self.read_u30()?;
+        let mut metadata = Vec::with_capacity(len as usize);
         for _ in 0..len {
             metadata.push(self.read_metadata()?);
         }
 
-        let len = self.read_u30()? as usize;
-        let mut instances = Vec::with_capacity(len);
+        let len = self.read_u30()?;
+        let mut instances = Vec::with_capacity(len as usize);
         for _ in 0..len {
             instances.push(self.read_instance()?);
         }
 
-        let mut classes = Vec::with_capacity(len);
+        let mut classes = Vec::with_capacity(len as usize);
         for _ in 0..len {
             classes.push(self.read_class()?);
         }
 
-        let len = self.read_u30()? as usize;
-        let mut scripts = Vec::with_capacity(len);
+        let len = self.read_u30()?;
+        let mut scripts = Vec::with_capacity(len as usize);
         for _ in 0..len {
             scripts.push(self.read_script()?);
         }
 
-        let len = self.read_u30()? as usize;
-        let mut method_bodies = Vec::with_capacity(len);
+        let len = self.read_u30()?;
+        let mut method_bodies = Vec::with_capacity(len as usize);
         for _ in 0..len {
             method_bodies.push(self.read_method_body()?);
         }
@@ -88,8 +88,8 @@ impl<'a> Reader<'a> {
     }
 
     fn read_i24(&mut self) -> Result<i32> {
-        Ok(i32::from(self.read_u8()? as i8)
-            | (i32::from(self.read_u8()? as i8) << 8)
+        Ok(i32::from(self.read_u8()?)
+            | (i32::from(self.read_u8()?) << 8)
             | (i32::from(self.read_u8()? as i8) << 16))
     }
 
@@ -98,12 +98,10 @@ impl<'a> Reader<'a> {
     }
 
     fn read_string(&mut self) -> Result<String> {
-        let len = self.read_u30()? as usize;
-        let mut s = String::with_capacity(len);
-        self.input
-            .by_ref()
-            .take(len as u64)
-            .read_to_string(&mut s)?;
+        let len = self.read_u30()?;
+        // TODO: Avoid allocating a String.
+        let mut s = String::with_capacity(len as usize);
+        self.read_slice(len as usize)?.read_to_string(&mut s)?;
         Ok(s)
     }
 
@@ -130,8 +128,8 @@ impl<'a> Reader<'a> {
     }
 
     fn read_namespace_set(&mut self) -> Result<NamespaceSet> {
-        let len = self.read_u30()? as usize;
-        let mut namespace_set = vec![];
+        let len = self.read_u30()?;
+        let mut namespace_set = Vec::with_capacity(len as usize);
         for _ in 0..len {
             namespace_set.push(self.read_index()?);
         }
@@ -171,65 +169,65 @@ impl<'a> Reader<'a> {
             0x1c => Multiname::MultinameLA {
                 namespace_set: self.read_index()?,
             },
+            0x1d => {
+                let base_type = self.read_index()?;
+                let count = self.read_u30()?;
+                let mut parameters = Vec::with_capacity(count as usize);
+
+                for _ in 0..count {
+                    parameters.push(self.read_index()?);
+                }
+
+                Multiname::TypeName {
+                    base_type,
+                    parameters,
+                }
+            }
             _ => return Err(Error::invalid_data("Invalid multiname kind")),
         })
     }
 
     fn read_constant_pool(&mut self) -> Result<ConstantPool> {
-        let len = self.read_u30()?;
+        let len = self.read_u30()?.saturating_sub(1);
         let mut ints = Vec::with_capacity(len as usize);
-        if len > 0 {
-            for _ in 0..len - 1 {
-                ints.push(self.read_i32()?);
-            }
+        for _ in 0..len {
+            ints.push(self.read_i32()?);
         }
 
-        let len = self.read_u30()?;
+        let len = self.read_u30()?.saturating_sub(1);
         let mut uints = Vec::with_capacity(len as usize);
-        if len > 0 {
-            for _ in 0..len - 1 {
-                uints.push(self.read_u30()?);
-            }
+        for _ in 0..len {
+            uints.push(self.read_u30()?);
         }
 
-        let len = self.read_u30()?;
+        let len = self.read_u30()?.saturating_sub(1);
         let mut doubles = Vec::with_capacity(len as usize);
-        if len > 0 {
-            for _ in 0..len - 1 {
-                doubles.push(self.read_f64()?);
-            }
+        for _ in 0..len {
+            doubles.push(self.read_f64()?);
         }
 
-        let len = self.read_u30()?;
+        let len = self.read_u30()?.saturating_sub(1);
         let mut strings = Vec::with_capacity(len as usize);
-        if len > 0 {
-            for _ in 0..len - 1 {
-                strings.push(self.read_string()?);
-            }
+        for _ in 0..len {
+            strings.push(self.read_string()?);
         }
 
-        let len = self.read_u30()?;
+        let len = self.read_u30()?.saturating_sub(1);
         let mut namespaces = Vec::with_capacity(len as usize);
-        if len > 0 {
-            for _ in 0..len - 1 {
-                namespaces.push(self.read_namespace()?);
-            }
+        for _ in 0..len {
+            namespaces.push(self.read_namespace()?);
         }
 
-        let len = self.read_u30()?;
+        let len = self.read_u30()?.saturating_sub(1);
         let mut namespace_sets = Vec::with_capacity(len as usize);
-        if len > 0 {
-            for _ in 0..len - 1 {
-                namespace_sets.push(self.read_namespace_set()?);
-            }
+        for _ in 0..len {
+            namespace_sets.push(self.read_namespace_set()?);
         }
 
-        let len = self.read_u30()?;
+        let len = self.read_u30()?.saturating_sub(1);
         let mut multinames = Vec::with_capacity(len as usize);
-        if len > 0 {
-            for _ in 0..len - 1 {
-                multinames.push(self.read_multiname()?);
-            }
+        for _ in 0..len {
+            multinames.push(self.read_multiname()?);
         }
 
         Ok(ConstantPool {
@@ -244,9 +242,9 @@ impl<'a> Reader<'a> {
     }
 
     fn read_method(&mut self) -> Result<Method> {
-        let num_params = self.read_u8()? as usize;
+        let num_params = self.read_u8()?;
         let return_type = self.read_index()?;
-        let mut params = vec![];
+        let mut params = Vec::with_capacity(num_params as usize);
         for _ in 0..num_params {
             params.push(MethodParam {
                 kind: self.read_index()?,
@@ -259,16 +257,18 @@ impl<'a> Reader<'a> {
 
         if flags & 0x08 != 0 {
             let num_optional_params = self.read_u30()? as usize;
-            #[allow(clippy::needless_range_loop)]
-            for i in 0..num_optional_params {
-                params[i].default_value = Some(self.read_constant_value()?);
+            if let Some(start) = params.len().checked_sub(num_optional_params) {
+                for param in &mut params[start..] {
+                    param.default_value = Some(self.read_constant_value()?);
+                }
+            } else {
+                return Err(Error::invalid_data("Too many optional parameters"));
             }
         }
 
         if flags & 0x80 != 0 {
-            #[allow(clippy::needless_range_loop)]
-            for i in 0..num_params {
-                params[i].name = Some(self.read_index()?);
+            for param in &mut params {
+                param.name = Some(self.read_index()?);
             }
         }
 
@@ -333,8 +333,8 @@ impl<'a> Reader<'a> {
 
     fn read_metadata(&mut self) -> Result<Metadata> {
         let name = self.read_index()?;
-        let mut items = vec![];
         let num_items = self.read_u30()?;
+        let mut items = Vec::with_capacity(num_items as usize);
         for _ in 0..num_items {
             items.push(MetadataItem {
                 key: self.read_index()?,
@@ -355,16 +355,16 @@ impl<'a> Reader<'a> {
             None
         };
 
-        let num_interfaces = self.read_u30()? as usize;
-        let mut interfaces = Vec::with_capacity(num_interfaces);
+        let num_interfaces = self.read_u30()?;
+        let mut interfaces = Vec::with_capacity(num_interfaces as usize);
         for _ in 0..num_interfaces {
             interfaces.push(self.read_index()?);
         }
 
         let init_method = self.read_index()?;
 
-        let num_traits = self.read_u30()? as usize;
-        let mut traits = Vec::with_capacity(num_traits);
+        let num_traits = self.read_u30()?;
+        let mut traits = Vec::with_capacity(num_traits as usize);
         for _ in 0..num_traits {
             traits.push(self.read_trait()?);
         }
@@ -384,8 +384,8 @@ impl<'a> Reader<'a> {
 
     fn read_class(&mut self) -> Result<Class> {
         let init_method = self.read_index()?;
-        let num_traits = self.read_u30()? as usize;
-        let mut traits = Vec::with_capacity(num_traits);
+        let num_traits = self.read_u30()?;
+        let mut traits = Vec::with_capacity(num_traits as usize);
         for _ in 0..num_traits {
             traits.push(self.read_trait()?);
         }
@@ -397,8 +397,8 @@ impl<'a> Reader<'a> {
 
     fn read_script(&mut self) -> Result<Script> {
         let init_method = self.read_index()?;
-        let num_traits = self.read_u30()? as usize;
-        let mut traits = Vec::with_capacity(num_traits);
+        let num_traits = self.read_u30()?;
+        let mut traits = Vec::with_capacity(num_traits as usize);
         for _ in 0..num_traits {
             traits.push(self.read_trait()?);
         }
@@ -447,8 +447,8 @@ impl<'a> Reader<'a> {
 
         let mut metadata = vec![];
         if flags & 0b0100_0000 != 0 {
-            let num_metadata = self.read_u30()? as usize;
-            metadata.reserve(num_metadata);
+            let num_metadata = self.read_u30()?;
+            metadata.reserve(num_metadata as usize);
             for _ in 0..num_metadata {
                 metadata.push(self.read_index()?);
             }
@@ -472,20 +472,17 @@ impl<'a> Reader<'a> {
 
         // Read the code data.
         let code_len = self.read_u30()?;
-        let mut code = Vec::with_capacity(code_len as usize);
-        self.input
-            .by_ref()
-            .take(code_len.into())
-            .read_to_end(&mut code)?;
+        // TODO: Avoid allocating a Vec.
+        let code = self.read_slice(code_len as usize)?.to_vec();
 
-        let num_exceptions = self.read_u30()? as usize;
-        let mut exceptions = Vec::with_capacity(num_exceptions);
+        let num_exceptions = self.read_u30()?;
+        let mut exceptions = Vec::with_capacity(num_exceptions as usize);
         for _ in 0..num_exceptions {
             exceptions.push(self.read_exception()?);
         }
 
-        let num_traits = self.read_u30()? as usize;
-        let mut traits = Vec::with_capacity(num_traits);
+        let num_traits = self.read_u30()?;
+        let mut traits = Vec::with_capacity(num_traits as usize);
         for _ in 0..num_traits {
             traits.push(self.read_trait()?);
         }
@@ -502,7 +499,7 @@ impl<'a> Reader<'a> {
         })
     }
 
-    pub fn read_op(&mut self) -> Result<Option<Op>> {
+    pub fn read_op(&mut self) -> Result<Op> {
         use crate::avm2::opcode::OpCode;
         use num_traits::FromPrimitive;
 
@@ -520,6 +517,9 @@ impl<'a> Reader<'a> {
         let op = match opcode {
             OpCode::Add => Op::Add,
             OpCode::AddI => Op::AddI,
+            OpCode::ApplyType => Op::ApplyType {
+                num_types: self.read_u30()?,
+            },
             OpCode::AsType => Op::AsType {
                 type_name: self.read_index()?,
             },
@@ -528,6 +528,10 @@ impl<'a> Reader<'a> {
             OpCode::BitNot => Op::BitNot,
             OpCode::BitOr => Op::BitOr,
             OpCode::BitXor => Op::BitXor,
+            OpCode::Bkpt => Op::Bkpt,
+            OpCode::BkptLine => Op::BkptLine {
+                line_num: self.read_u30()?,
+            },
             OpCode::Call => Op::Call {
                 num_args: self.read_u30()?,
             },
@@ -564,7 +568,12 @@ impl<'a> Reader<'a> {
                 index: self.read_index()?,
             },
             OpCode::CoerceA => Op::CoerceA,
+            OpCode::CoerceB => Op::CoerceB,
+            OpCode::CoerceD => Op::CoerceD,
+            OpCode::CoerceI => Op::CoerceI,
+            OpCode::CoerceO => Op::CoerceO,
             OpCode::CoerceS => Op::CoerceS,
+            OpCode::CoerceU => Op::CoerceU,
             OpCode::Construct => Op::Construct {
                 num_args: self.read_u30()?,
             },
@@ -616,6 +625,9 @@ impl<'a> Reader<'a> {
             OpCode::Equals => Op::Equals,
             OpCode::EscXAttr => Op::EscXAttr,
             OpCode::EscXElem => Op::EscXElem,
+            OpCode::FindDef => Op::FindDef {
+                index: self.read_index()?,
+            },
             OpCode::FindProperty => Op::FindProperty {
                 index: self.read_index()?,
             },
@@ -639,6 +651,9 @@ impl<'a> Reader<'a> {
             OpCode::GetLocal1 => Op::GetLocal { index: 1 },
             OpCode::GetLocal2 => Op::GetLocal { index: 2 },
             OpCode::GetLocal3 => Op::GetLocal { index: 3 },
+            OpCode::GetOuterScope => Op::GetOuterScope {
+                index: self.read_u30()?,
+            },
             OpCode::GetProperty => Op::GetProperty {
                 index: self.read_index()?,
             },
@@ -735,7 +750,7 @@ impl<'a> Reader<'a> {
                 default_offset: self.read_i24()?,
                 case_offsets: {
                     let num_cases = self.read_u30()? + 1;
-                    let mut case_offsets = vec![];
+                    let mut case_offsets = Vec::with_capacity(num_cases as usize);
                     for _ in 0..num_cases {
                         case_offsets.push(self.read_i24()?);
                     }
@@ -772,6 +787,9 @@ impl<'a> Reader<'a> {
             OpCode::PopScope => Op::PopScope,
             OpCode::PushByte => Op::PushByte {
                 value: self.read_u8()?,
+            },
+            OpCode::PushConstant => Op::PushConstant {
+                value: self.read_u30()?,
             },
             OpCode::PushDouble => Op::PushDouble {
                 value: self.read_index()?,
@@ -832,12 +850,13 @@ impl<'a> Reader<'a> {
             OpCode::Sxi1 => Op::Sxi1,
             OpCode::Sxi16 => Op::Sxi16,
             OpCode::Sxi8 => Op::Sxi8,
+            OpCode::Timestamp => Op::Timestamp,
             OpCode::Throw => Op::Throw,
             OpCode::TypeOf => Op::TypeOf,
             OpCode::URShift => Op::URShift,
         };
 
-        Ok(Some(op))
+        Ok(op)
     }
 
     fn read_exception(&mut self) -> Result<Exception> {
@@ -852,6 +871,7 @@ impl<'a> Reader<'a> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unusual_byte_groupings)]
 pub mod tests {
     use super::*;
     use crate::test_data;
@@ -874,13 +894,11 @@ pub mod tests {
         for (_, abc_file, bytes) in test_data::avm2_tests() {
             let mut reader = Reader::new(&bytes[..]);
             let parsed = reader.read().unwrap();
-            if parsed != abc_file {
-                // Failed, result doesn't match.
-                panic!(
-                    "Incorrectly parsed ABC.\nRead:\n{:?}\n\nExpected:\n{:?}",
-                    parsed, abc_file
-                );
-            }
+            assert_eq!(
+                parsed, abc_file,
+                "Incorrectly parsed ABC.\nRead:\n{:?}\n\nExpected:\n{:?}",
+                parsed, abc_file
+            );
         }
     }
 
@@ -914,6 +932,15 @@ pub mod tests {
             ]),
             0b1111_0000000_0000000_0000000_0000000
         );
+    }
+
+    #[test]
+    fn read_i24() {
+        let read = |data: &[u8]| Reader::new(data).read_i24().unwrap();
+        assert_eq!(read(&[0, 0, 0]), 0);
+        assert_eq!(read(&[2, 0, 0]), 2);
+        assert_eq!(read(&[0b1101_0001, 0b0010_1111, 0b0000_0001]), 77777);
+        assert_eq!(read(&[0b0010_1111, 0b1101_0000, 0b1111_1110]), -77777);
     }
 
     #[test]

@@ -10,7 +10,6 @@
 //! Use `from_f32`/`from_f64` methods to convert from float to fixed-point.
 //! Extra precision will be truncated, and out-of-range values are saturated.
 
-use std::convert::TryFrom;
 use std::ops::*;
 
 macro_rules! define_fixed {
@@ -126,35 +125,41 @@ macro_rules! define_fixed {
             /// Wrapping (modular) negation. Computes -self, wrapping around at the boundary of the type.
             /// -Self::MIN is the only case where wrapping occurs.
             #[inline]
-            pub fn wrapping_neg(self) -> Self {
+            #[must_use]
+            pub const fn wrapping_neg(self) -> Self {
                 Self(self.0.wrapping_neg())
             }
 
             /// Wrapping (modular) addition. Computes self + rhs, wrapping around at the boundary of the type.
             #[inline]
-            pub fn wrapping_add(self, other: Self) -> Self {
+            #[must_use]
+            pub const fn wrapping_add(self, other: Self) -> Self {
                 Self(self.0.wrapping_add(other.0))
             }
 
             /// Wrapping (modular) subtraction. Computes self - rhs, wrapping around at the boundary of the type.
             #[inline]
-            pub fn wrapping_sub(self, other: Self) -> Self {
+            #[must_use]
+            pub const fn wrapping_sub(self, other: Self) -> Self {
                 Self(self.0.wrapping_sub(other.0))
             }
 
             /// Wrapping (modular) multiplication. Computes self * rhs, wrapping around at the boundary of the type.
             #[inline]
-            pub fn wrapping_mul(self, other: Self) -> Self {
-                let n = <$intermediate_type>::from(self.0)
-                    .wrapping_mul(<$intermediate_type>::from(other.0))
+            #[must_use]
+            pub const fn wrapping_mul(self, other: Self) -> Self {
+                let n = (self.0 as $intermediate_type)
+                    .wrapping_mul(other.0 as $intermediate_type)
                     >> Self::FRACTIONAL_BITS;
                 Self(n as $underlying_type)
             }
 
             /// Wrapping (modular) division. Computes self / rhs, wrapping around at the boundary of the type.
             #[inline]
-            pub fn wrapping_div(self, other: Self) -> Self {
-                let n = (<$intermediate_type>::from(self.0) << Self::FRACTIONAL_BITS).wrapping_div(<$intermediate_type>::from(other.0));
+            #[must_use]
+            pub const fn wrapping_div(self, other: Self) -> Self {
+                let n = ((self.0 as $intermediate_type) << Self::FRACTIONAL_BITS)
+                    .wrapping_div(other.0 as $intermediate_type);
                 Self(n as $underlying_type)
             }
 
@@ -162,9 +167,9 @@ macro_rules! define_fixed {
             /// Multiplies this fixed-point by an integer, returning the integer result.
             /// The result will use the full size of the integer. The fractional bits will be truncated.
             #[inline]
-            pub fn wrapping_mul_int(self, other: $underlying_type) -> $underlying_type {
-                let n = (<$intermediate_type>::from(self.0)
-                    .wrapping_mul(<$intermediate_type>::from(other)))
+            pub const fn wrapping_mul_int(self, other: $underlying_type) -> $underlying_type {
+                let n = (self.0 as $intermediate_type)
+                    .wrapping_mul(other as $intermediate_type)
                     >> Self::FRACTIONAL_BITS;
                 n as $underlying_type
             }
@@ -348,7 +353,6 @@ define_fixed!(Fixed8, i16, i32, 8, from_int(i8), into_float(f32, f64));
 define_fixed!(Fixed16, i32, i64, 16, from_int(i8, i16), into_float(f64));
 
 #[cfg(test)]
-#[allow(clippy::float_cmp, clippy::eq_op)]
 pub mod tests {
     use super::*;
 

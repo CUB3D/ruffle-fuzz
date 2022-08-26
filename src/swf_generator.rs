@@ -3,7 +3,6 @@ use md5::Digest;
 use rand::rngs::SmallRng;
 use rand::{Rng, RngCore, SeedableRng, thread_rng};
 use ruffle_core::backend::audio::NullAudioBackend;
-use ruffle_core::backend::locale::NullLocaleBackend;
 use ruffle_core::backend::log::LogBackend;
 use ruffle_core::backend::navigator::NullNavigatorBackend;
 use ruffle_core::backend::render::NullRenderer;
@@ -22,7 +21,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use subprocess::{Exec, Redirection};
-use swf::avm1::types::{Action, Value};
+use swf::avm1::types::{Action, GetUrl, If, Push, Value};
 use swf::{Compression, Header, Rectangle, SwfStr, Tag, Twips};
 use swf::avm1::write::Writer;
 use thiserror::Error;
@@ -100,13 +99,13 @@ impl SwfGenerator {
         let pos = w.output.len();
         w.write_action(&Action::PushDuplicate)?;
         w.write_action(&Action::Trace)?;
-        w.write_action(&Action::Push(vec![Value::Str("#PREFIX#".into())]))?;
+        w.write_action(&Action::Push(Push {values: vec![Value::Str("#PREFIX#".into())]}))?;
         w.write_action(&Action::Equals2)?;
         w.write_action(&Action::Not)?;
         let offset = pos.wrapping_sub(w.output.len());
-        w.write_action(&Action::If {
+        w.write_action(&Action::If(If {
             offset: offset as i16 - 5,
-        })?;
+        }))?;
 
         Ok(())
     }
@@ -116,69 +115,69 @@ impl SwfGenerator {
         // todo: so does less
         let (action, arg_count) = self.select(
             &[
-                (Action::Add, 2),
-                (Action::Add2, 2),
-                (Action::And, 2),
-                (Action::AsciiToChar, 1),
-                (Action::BitAnd, 2),
-                (Action::BitLShift, 2),
-                (Action::BitOr, 2),
-                (Action::BitRShift, 2),
-                (Action::BitURShift, 2),
-                (Action::BitXor, 2),
+                // (Action::Add, 2),
+               // (Action::Add2, 2),
+               // (Action::And, 2),
+               // (Action::AsciiToChar, 1),
+               //  (Action::BitAnd, 2),
+               //  (Action::BitLShift, 2),
+               //  (Action::BitOr, 2),
+               //  (Action::BitRShift, 2),
+               //  (Action::BitURShift, 2),
+               //  (Action::BitXor, 2),
                 //_
-                (Action::CastOp, 2),
-                (Action::CharToAscii, 1),
+                // (Action::CastOp, 2),
+                // (Action::CharToAscii, 1),
                 //_
                 // TODO: constant pool
-                (Action::Decrement, 1),
+                // (Action::Decrement, 1),
                 //_
                 // TODO: divide
                 (Action::Enumerate, 1),
-                (Action::Enumerate2, 1),
-                (Action::Equals, 2),
-                (Action::Equals2, 2),
+                /*(Action::Enumerate2, 1),*/
+                // (Action::Equals, 2),
+                // (Action::Equals2, 2),
                 //_
-                (Action::Greater, 2),
+                // (Action::Greater, 2),
                 // (Action::ImplementsOp, ?), TODO: needs special handling
-                (Action::Increment, 1),
+                // (Action::Increment, 1),
                 // (Action::InitArray, ?), TODO: special handling
                 // (Action::InitObject, ?), TODO: special handling
-                (Action::InstanceOf, 2),
-                (Action::Less, 2),
-                (Action::Less2, 2),
-                (Action::MBAsciiToChar, 1),
-                (Action::MBCharToAscii, 1),
-                (Action::MBStringExtract, 3),
-                (Action::MBStringLength, 1),
+                // (Action::InstanceOf, 2),
+                // (Action::Less, 2),
+                // (Action::Less2, 2),
+                // (Action::MBAsciiToChar, 1),
+                // (Action::MBCharToAscii, 1),
+                // (Action::MBStringExtract, 3),
+                // (Action::MBStringLength, 1),
                 // (Action::Modulo, 2), TODO: doubles dont match
                 // (Action::Multiply, 2), TODO: doubles dont match
                 //_
-                (Action::Not, 1),
-                (Action::Or, 2),
+                // (Action::Not, 1),
+                // (Action::Or, 2),
                 //_
-                (Action::Pop, 1),
+                // (Action::Pop, 1),
                 //_
-                (Action::PushDuplicate, 1),
+                // (Action::PushDuplicate, 1),
                 //_
-                (Action::StackSwap, 2),
+                // (Action::StackSwap, 2),
                 //_
-                (Action::StrictEquals, 2),
-                (Action::StringAdd, 2),
-                (Action::StringEquals, 2),
-                (Action::StringExtract, 3),
-                (Action::StringGreater, 2),
-                (Action::StringLength, 1),
-                (Action::StringLess, 2),
+                // (Action::StrictEquals, 2),
+                // (Action::StringAdd, 2),
+                // (Action::StringEquals, 2),
+                // (Action::StringExtract, 3),
+                // (Action::StringGreater, 2),
+                // (Action::StringLength, 1),
+                // (Action::StringLess, 2),
                 // (Action::Subtract, 2), TODO: doubles dont match
-                (Action::TargetPath, 1),
+                // (Action::TargetPath, 1),
                 //_
-                (Action::ToInteger, 1),
-                (Action::ToNumber, 1),
-                (Action::ToString, 1),
-                (Action::ToggleQuality, 0),
-                (Action::Trace, 1),
-                (Action::TypeOf, 1),
+                // (Action::ToInteger, 1),
+                // (Action::ToNumber, 1),
+                // (Action::ToString, 1),
+                // (Action::ToggleQuality, 0),
+                // (Action::Trace, 1),
+                // (Action::TypeOf, 1),
                 //_
             ],
         );
@@ -187,9 +186,9 @@ impl SwfGenerator {
         //TODO: dump entire stack, not just top so we can check multi value actions like enumerate
 
         for _ in 0..arg_count {
-            w.write_action(&Action::Push(vec![self.random_value_simple(
+            w.write_action(&Action::Push(Push {values: vec![self.random_value_simple(
                 strings,
-            )]))?;
+            )]}))?;
         }
         // Testing arithmetic ops
         w.write_action(&action)?;
@@ -291,7 +290,7 @@ impl SwfGenerator {
         }
 
         // Put something on the stack so if the add produces nothing, we get a known value
-        w.write_action(&Action::Push(vec![Value::Str("#PREFIX#".into())]))?;
+        w.write_action(&Action::Push(Push {values: vec![Value::Str("#PREFIX#".into())]}))?;
 
         if DYNAMIC_FUNCTION_FUZZ {
             //TODO: support for flash.foo.bar.Thing
@@ -330,21 +329,21 @@ impl SwfGenerator {
 
             // The name of the object
             strings.push("foo".as_bytes().to_vec());
-            w.write_action(&Action::Push(vec![Value::Str(SwfStr::from_bytes(
+            w.write_action(&Action::Push(Push {values: vec![Value::Str(SwfStr::from_bytes(
                 strings.last().unwrap(),
-            ))]))?;
+            ))]}))?;
 
             // Push the args
             for _ in 0..arg_count {
-                w.write_action(&Action::Push(vec![random_value(&mut self.rng, &mut strings)]))?;
+                w.write_action(&Action::Push(Push {values: vec![random_value(&mut self.rng, &mut strings)]}))?;
             }
 
             // The name, the arg count
             strings.push(class_name.as_bytes().to_vec());
-            w.write_action(&Action::Push(vec![
+            w.write_action(&Action::Push(Push {values: vec![
                 Value::Int(arg_count),
                 Value::Str(SwfStr::from_bytes(strings.last().unwrap())),
-            ]))?;
+            ]}))?;
             //TODO: some use newmethod
             w.write_action(&Action::NewObject)?;
             w.write_action(&Action::DefineLocal)?;
@@ -355,22 +354,22 @@ impl SwfGenerator {
 
             // Push function args and arg count
             for _ in 0..function_arg_count {
-                w.write_action(&Action::Push(vec![random_value(&mut self.rng, &mut strings)]))?;
+                w.write_action(&Action::Push(Push {values: vec![random_value(&mut self.rng, &mut strings)]}))?;
             }
-            w.write_action(&Action::Push(vec![Value::Int(function_arg_count)]))?;
+            w.write_action(&Action::Push(Push {values: vec![Value::Int(function_arg_count)]}))?;
 
             // Get foo
             strings.push("foo".as_bytes().to_vec());
-            w.write_action(&Action::Push(vec![Value::Str(SwfStr::from_bytes(
+            w.write_action(&Action::Push(Push {values: vec![Value::Str(SwfStr::from_bytes(
                 strings.last().unwrap(),
-            ))]))?;
+            ))]}))?;
             w.write_action(&Action::GetVariable)?;
 
             // Call foo.<function_name>()
             strings.push(function_name.as_bytes().to_vec());
-            w.write_action(&Action::Push(vec![Value::Str(SwfStr::from_bytes(
+            w.write_action(&Action::Push(Push {values: vec![Value::Str(SwfStr::from_bytes(
                 strings.last().unwrap(),
-            ))]))?;
+            ))]}))?;
             w.write_action(&Action::CallMethod)?;
 
             Self::dump_stack(&mut w)?;
@@ -433,15 +432,15 @@ impl SwfGenerator {
             let arg_count = self.rng.gen_range(0..=*arg_count_range.end());
 
             for _ in 0..arg_count {
-                w.write_action(&Action::Push(vec![random_value(&mut self.rng, &mut strings)]))?;
+                w.write_action(&Action::Push(Push {values: vec![random_value(&mut self.rng, &mut strings)]}))?;
             }
 
-            w.write_action(&Action::Push(vec![
+            w.write_action(&Action::Push(Push {values: vec![
                 Value::Int(arg_count),
                 Value::Str(obj_name.into()),
-            ]))?;
+            ]}))?;
             w.write_action(&Action::GetVariable)?;
-            w.write_action(&Action::Push(vec![Value::Str(func_name.into())]))?;
+            w.write_action(&Action::Push(Push {values: vec![Value::Str(func_name.into())]}))?;
             w.write_action(&Action::CallMethod)?;
 
             Self::dump_stack(&mut w)?;
@@ -452,13 +451,13 @@ impl SwfGenerator {
         }
 
         // Log a sentinal so we know that its done
-        w.write_action(&Action::Push(vec![Value::Str("#CASE_COMPLETE#".into())]))?;
+        w.write_action(&Action::Push(Push {values: vec![Value::Str("#CASE_COMPLETE#".into())]}))?;
         w.write_action(&Action::Trace)?;
 
-        w.write_action(&Action::GetUrl {
+        w.write_action(&Action::GetUrl(GetUrl {
             target: "_root".into(),
             url: "fscommand:quit".into(),
-        })?;
+        }))?;
 
         // Create the swf
         swf::write_swf(

@@ -1185,7 +1185,6 @@ dependencies = [
  "lzma-rs",
  "num-derive",
  "num-traits",
- "smallvec",
 ]
 
 [[package]]
