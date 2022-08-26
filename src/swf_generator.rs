@@ -5,7 +5,6 @@ use rand::{Rng, RngCore, SeedableRng, thread_rng};
 use ruffle_core::backend::audio::NullAudioBackend;
 use ruffle_core::backend::log::LogBackend;
 use ruffle_core::backend::navigator::NullNavigatorBackend;
-use ruffle_core::backend::render::NullRenderer;
 use ruffle_core::backend::storage::MemoryStorageBackend;
 use ruffle_core::backend::ui::NullUiBackend;
 use ruffle_core::backend::video::NullVideoBackend;
@@ -75,6 +74,7 @@ impl SwfGenerator {
         options[index].clone()
     }
 
+    /// Generate a single random value
     pub fn random_value_simple<'val, 'strings: 'val>(
         &mut self,
         strings: &'strings mut Vec<Vec<u8>>,
@@ -94,7 +94,26 @@ impl SwfGenerator {
         }
     }
 
-    // Log entire stack
+    /// Generate a random object with a random number of members of random value, recursion not yet supported
+    pub fn random_object_simple(&mut self, strings: &mut Vec<Vec<u8>>, w: &mut Writer<&mut Vec<u8>>) -> Result<(), Box<dyn Error>> {
+        let member_count = self.rng.gen_range(0..10);
+
+        for i in 0..member_count {
+            w.write_action(&Action::Push(Push {
+                values: vec![Value::Str(format!("Member{}", i).as_str().into()), self.random_value_simple(strings)]
+            }))?;
+        }
+
+        w.write_action(&Action::Push(Push {
+            //TODO: maybe double
+            values: vec![Value::Int(member_count)]
+        }))?;
+        w.write_action(&Action::InitObject)?;
+
+        Ok(())
+    }
+
+    /// Emit opcodes to trace entire stack
     fn dump_stack(w: &mut Writer<&mut Vec<u8>>) -> Result<(), Box<dyn Error>> {
         let pos = w.output.len();
         w.write_action(&Action::PushDuplicate)?;
@@ -115,16 +134,16 @@ impl SwfGenerator {
         // todo: so does less
         let (action, arg_count) = self.select(
             &[
-                // (Action::Add, 2),
-               // (Action::Add2, 2),
-               // (Action::And, 2),
-               // (Action::AsciiToChar, 1),
-               //  (Action::BitAnd, 2),
-               //  (Action::BitLShift, 2),
-               //  (Action::BitOr, 2),
-               //  (Action::BitRShift, 2),
-               //  (Action::BitURShift, 2),
-               //  (Action::BitXor, 2),
+                (Action::Add, 2),
+               (Action::Add2, 2),
+               (Action::And, 2),
+               (Action::AsciiToChar, 1),
+                (Action::BitAnd, 2),
+                (Action::BitLShift, 2),
+                (Action::BitOr, 2),
+                (Action::BitRShift, 2),
+                (Action::BitURShift, 2),
+                (Action::BitXor, 2),
                 //_
                 // (Action::CastOp, 2),
                 // (Action::CharToAscii, 1),

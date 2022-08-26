@@ -5,7 +5,6 @@ use rand::{Rng, RngCore, SeedableRng, thread_rng};
 use ruffle_core::backend::audio::NullAudioBackend;
 use ruffle_core::backend::log::LogBackend;
 use ruffle_core::backend::navigator::NullNavigatorBackend;
-use ruffle_core::backend::render::NullRenderer;
 use ruffle_core::backend::storage::MemoryStorageBackend;
 use ruffle_core::backend::ui::NullUiBackend;
 use ruffle_core::backend::video::NullVideoBackend;
@@ -22,6 +21,8 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use log::{info, warn};
 use ruffle_core::external::{ExternalInterfaceMethod, ExternalInterfaceProvider};
+use ruffle_render::backend::null::NullRenderer;
+use ruffle_render::backend::ViewportDimensions;
 use subprocess::{Exec, Redirection};
 use swf::avm1::types::{Action, Value};
 use swf::{Compression, Header, Rectangle, SwfStr, Tag, Twips};
@@ -179,7 +180,11 @@ async fn open_ruffle(bytes: Vec<u8>) -> Result<(String, Duration), MyError> {
     let log = StringLogger::default();
 
     let player = ruffle_core::PlayerBuilder::new()
-        .with_renderer(NullRenderer::default())
+        .with_renderer(NullRenderer::new(ViewportDimensions {
+            height: 32,
+            width: 32,
+            scale_factor: 1.0,
+        }))
         .with_audio(NullAudioBackend::default())
         .with_navigator(NullNavigatorBackend::default())
         .with_storage(MemoryStorageBackend::default())

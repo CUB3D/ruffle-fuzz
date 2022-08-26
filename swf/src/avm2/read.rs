@@ -29,6 +29,11 @@ impl<'a> Reader<'a> {
         ReadSwfExt::seek(self, data, relative_offset as isize)
     }
 
+    #[inline]
+    pub fn seek_absolute(&mut self, data: &'a [u8], pos: usize) {
+        ReadSwfExt::seek_absolute(self, data, pos)
+    }
+
     pub fn read(&mut self) -> Result<AbcFile> {
         let minor_version = self.read_u16()?;
         let major_version = self.read_u16()?;
@@ -242,7 +247,7 @@ impl<'a> Reader<'a> {
     }
 
     fn read_method(&mut self) -> Result<Method> {
-        let num_params = self.read_u8()?;
+        let num_params = self.read_u30()?;
         let return_type = self.read_index()?;
         let mut params = Vec::with_capacity(num_params as usize);
         for _ in 0..num_params {
@@ -253,9 +258,9 @@ impl<'a> Reader<'a> {
             })
         }
         let name = self.read_index()?;
-        let flags = self.read_u8()?;
+        let flags = MethodFlags::from_bits_truncate(self.read_u8()?);
 
-        if flags & 0x08 != 0 {
+        if flags.contains(MethodFlags::HAS_OPTIONAL) {
             let num_optional_params = self.read_u30()? as usize;
             if let Some(start) = params.len().checked_sub(num_optional_params) {
                 for param in &mut params[start..] {
@@ -266,7 +271,7 @@ impl<'a> Reader<'a> {
             }
         }
 
-        if flags & 0x80 != 0 {
+        if flags.contains(MethodFlags::HAS_PARAM_NAMES) {
             for param in &mut params {
                 param.name = Some(self.read_index()?);
             }
@@ -276,10 +281,7 @@ impl<'a> Reader<'a> {
             name,
             params,
             return_type,
-            needs_arguments_object: flags & 0x01 != 0,
-            needs_activation: flags & 0x02 != 0,
-            needs_rest: flags & 0x04 != 0,
-            needs_dxns: flags & 0x40 != 0,
+            flags,
         })
     }
 
@@ -900,6 +902,24 @@ pub mod tests {
                 parsed, abc_file
             );
         }
+    }
+
+    #[test]
+    fn test_round_trip_default_value() {
+        use crate::avm2::write::Writer;
+
+        let orig_bytes = read_abc_from_file("tests/swfs/Avm2DefaultValue.swf");
+        let mut reader = Reader::new(&orig_bytes[..]);
+        let parsed = reader.read().unwrap();
+
+        let mut out = vec![];
+        let mut writer = Writer::new(&mut out);
+        writer.write(parsed).unwrap();
+
+        assert_eq!(
+            orig_bytes, out,
+            "Incorrectly written Avm2DefaultValue class"
+        );
     }
 
     #[test]

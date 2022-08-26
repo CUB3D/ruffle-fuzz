@@ -8,15 +8,14 @@ edition = "2018"
 [dependencies]
 subprocess = "0.2.9"
 swf = { path = "./swf" }
-#regex = "1.5.4"
 rand = {version = "0.8.5", features = ["small_rng"]}
-lazy_static = "1.4.0"
 md5 = "0.7.0"
 dirs-next = "2.0.0"
 thiserror = "1.0.31"
 tokio = {version = "1.19.2", features = ["macros", "fs", "rt"]}
 ptrace = { path = "./ptrace", features = ["breakpoints"] }
 ruffle_core = { path = "./ruffle/core"}
+ruffle_render = { path = "./ruffle/render"}
 
 log = "0.4.17"
 env_logger = "0.9.0"

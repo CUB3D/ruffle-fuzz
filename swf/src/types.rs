@@ -2,15 +2,22 @@
 //!
 //! These structures are documented in the Adobe SWF File Format Specification
 //! version 19 (henceforth SWF19):
-//! https://www.adobe.com/content/dam/acom/en/devnet/pdf/swf-file-format-spec.pdf
+//! <https://www.adobe.com/content/dam/acom/en/devnet/pdf/swf-file-format-spec.pdf>
 use crate::string::SwfStr;
 use bitflags::bitflags;
+use enum_map::Enum;
+use std::fmt::{self, Display, Formatter};
+use std::str::FromStr;
 
+mod color;
 mod fixed;
 mod matrix;
+mod twips;
 
-pub use fixed::*;
+pub use color::Color;
+pub use fixed::{Fixed16, Fixed8};
 pub use matrix::Matrix;
+pub use twips::Twips;
 
 /// A complete header and tags in the SWF file.
 /// This is returned by the `swf::parse_swf` convenience method.
@@ -182,190 +189,6 @@ pub enum Compression {
     Lzma,
 }
 
-/// A type-safe wrapper type documenting where "twips" are used
-/// in the SWF format.
-///
-/// A twip is 1/20th of a pixel.
-/// Most coordinates in an SWF file are represented in twips.
-///
-/// Use the [`from_pixels`] and [`to_pixels`] methods to convert to and from
-/// pixel values.
-///
-/// [`from_pixels`]: Twips::from_pixels
-/// [`to_pixels`]: Twips::to_pixels
-#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
-pub struct Twips(i32);
-
-impl Twips {
-    /// There are 20 twips in a pixel.
-    pub const TWIPS_PER_PIXEL: f64 = 20.0;
-
-    /// The `Twips` object with a value of `0`.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// assert_eq!(swf::Twips::ZERO.to_pixels(), 0.0);
-    /// ```
-    pub const ZERO: Self = Self(0);
-
-    /// The `Twips` object with a value of `1` pixel.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// assert_eq!(swf::Twips::ONE.to_pixels(), 1.0);
-    /// ```
-    pub const ONE: Self = Self(Self::TWIPS_PER_PIXEL as i32);
-
-    /// Creates a new `Twips` object. Note that the `twips` value is in twips,
-    /// not pixels. Use the [`from_pixels`] method to convert from pixel units.
-    ///
-    /// [`from_pixels`]: Twips::from_pixels
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use swf::Twips;
-    ///
-    /// let twips = Twips::new(40);
-    /// ```
-    pub fn new<T: Into<i32>>(twips: T) -> Self {
-        Self(twips.into())
-    }
-
-    /// Returns the number of twips.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use swf::Twips;
-    ///
-    /// let twips = Twips::new(47);
-    /// assert_eq!(twips.get(), 47);
-    /// ```
-    pub const fn get(self) -> i32 {
-        self.0
-    }
-
-    /// Converts the given number of `pixels` into twips.
-    ///
-    /// This may be a lossy conversion; any precision more than a twip (1/20 pixels) is truncated.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use swf::Twips;
-    ///
-    /// // 40 pixels is equivalent to 800 twips.
-    /// let twips = Twips::from_pixels(40.0);
-    /// assert_eq!(twips.get(), 800);
-    ///
-    /// // Output is truncated if more precise than a twip (1/20 pixels).
-    /// let twips = Twips::from_pixels(40.018);
-    /// assert_eq!(twips.get(), 800);
-    /// ```
-    pub fn from_pixels(pixels: f64) -> Self {
-        Self((pixels * Self::TWIPS_PER_PIXEL) as i32)
-    }
-
-    /// Converts this twips value into pixel units.
-    ///
-    /// This is a lossless operation.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use swf::Twips;
-    ///
-    /// // 800 twips is equivalent to 40 pixels.
-    /// let twips = Twips::new(800);
-    /// assert_eq!(twips.to_pixels(), 40.0);
-    ///
-    /// // Twips are sub-pixel: 713 twips represent 35.65 pixels.
-    /// let twips = Twips::new(713);
-    /// assert_eq!(twips.to_pixels(), 35.65);
-    /// ```
-    pub fn to_pixels(self) -> f64 {
-        f64::from(self.0) / Self::TWIPS_PER_PIXEL
-    }
-
-    /// Saturating integer subtraction. Computes `self - rhs`, saturating at the numeric bounds
-    /// of [`i32`] instead of overflowing.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use swf::Twips;
-    ///
-    /// assert_eq!(Twips::new(40).saturating_sub(Twips::new(20)), Twips::new(20));
-    /// assert_eq!(Twips::new(i32::MIN).saturating_sub(Twips::new(5)), Twips::new(i32::MIN));
-    /// assert_eq!(Twips::new(i32::MAX).saturating_sub(Twips::new(-100)), Twips::new(i32::MAX));
-    /// ```
-    #[must_use]
-    pub const fn saturating_sub(self, rhs: Self) -> Self {
-        Self(self.0.saturating_sub(rhs.0))
-    }
-}
-
-impl std::ops::Add for Twips {
-    type Output = Self;
-    fn add(self, other: Self) -> Self {
-        Self(self.0 + other.0)
-    }
-}
-
-impl std::ops::AddAssign for Twips {
-    fn add_assign(&mut self, other: Self) {
-        self.0 += other.0
-    }
-}
-
-impl std::ops::Sub for Twips {
-    type Output = Self;
-    fn sub(self, other: Self) -> Self {
-        Self(self.0 - other.0)
-    }
-}
-
-impl std::ops::SubAssign for Twips {
-    fn sub_assign(&mut self, other: Self) {
-        self.0 -= other.0
-    }
-}
-
-impl std::ops::Mul<i32> for Twips {
-    type Output = Self;
-    fn mul(self, other: i32) -> Self {
-        Self(self.0 * other)
-    }
-}
-
-impl std::ops::MulAssign<i32> for Twips {
-    fn mul_assign(&mut self, other: i32) {
-        self.0 *= other
-    }
-}
-
-impl std::ops::Div<i32> for Twips {
-    type Output = Self;
-    fn div(self, other: i32) -> Self {
-        Self(self.0 / other)
-    }
-}
-
-impl std::ops::DivAssign<i32> for Twips {
-    fn div_assign(&mut self, other: i32) {
-        self.0 /= other
-    }
-}
-
-impl std::fmt::Display for Twips {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.to_pixels())
-    }
-}
-
 /// A rectangular region defined by minimum
 /// and maximum x- and y-coordinate positions
 /// measured in [`Twips`].
@@ -382,110 +205,6 @@ pub struct Rectangle {
 
     /// The maximum y-position of the rectangle.
     pub y_max: Twips,
-}
-
-/// An RGBA (red, green, blue, alpha) color.
-///
-/// All components are stored as [`u8`] and have a color range of 0-255.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Color {
-    /// The red component value.
-    pub r: u8,
-
-    /// The green component value.
-    pub g: u8,
-
-    /// The blue component value.
-    pub b: u8,
-
-    /// The alpha component value.
-    pub a: u8,
-}
-
-impl Color {
-    pub const BLACK: Self = Self::from_rgb(0, 255);
-    pub const WHITE: Self = Self::from_rgb(0xFFFFFF, 255);
-
-    /// Creates a `Color` from a 32-bit `rgb` value and an `alpha` value.
-    ///
-    /// The byte-ordering of the 32-bit `rgb` value is XXRRGGBB.
-    /// The most significant byte, represented by XX, is ignored;
-    /// the `alpha` value is provided separately.
-    /// This is followed by the the red (RR), green (GG), and blue (BB) components values,
-    /// respectively.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use swf::Color;
-    ///
-    /// let red = Color::from_rgb(0xFF0000, 255);
-    /// let green = Color::from_rgb(0x00FF00, 255);
-    /// let blue = Color::from_rgb(0x0000FF, 255);
-    /// ```
-    pub const fn from_rgb(rgb: u32, alpha: u8) -> Self {
-        let [b, g, r, _] = rgb.to_le_bytes();
-        Self { r, g, b, a: alpha }
-    }
-
-    /// Creates a `Color` from a 32-bit `rgba` value.
-    ///
-    /// The byte-ordering of the 32-bit `rgba` value is AARRGGBB.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use swf::Color;
-    ///
-    /// let red = Color::from_rgba(0xFFFF0000);
-    /// let green = Color::from_rgba(0xFF00FF00);
-    /// let blue = Color::from_rgba(0xFF0000FF);
-    /// ```
-    pub const fn from_rgba(rgba: u32) -> Self {
-        let [b, g, r, a] = rgba.to_le_bytes();
-        Self { r, g, b, a }
-    }
-
-    /// Converts the color to a 32-bit RGB value.
-    ///
-    /// The alpha value does not get stored.
-    ///
-    /// # Examples
-    ///
-    /// Basic usage:
-    /// ```rust
-    /// use swf::Color;
-    ///
-    /// let color = Color::from_rgb(0xFF00FF, 255);
-    /// assert_eq!(color.to_rgb(), 0xFF00FF);
-    /// ```
-    ///
-    /// Alpha values do not get stored:
-    /// ```rust
-    /// use swf::Color;
-    ///
-    /// let color1 = Color::from_rgb(0xFF00FF, 255);
-    /// let color2 = Color::from_rgb(0xFF00FF, 0);
-    /// assert_eq!(color1.to_rgb(), color2.to_rgb());
-    /// ```
-    pub const fn to_rgb(&self) -> u32 {
-        u32::from_le_bytes([self.b, self.g, self.r, 0])
-    }
-
-    /// Converts the color to a 32-bit RGBA value.
-    ///
-    /// # Examples
-    ///
-    /// Basic usage:
-    /// ```rust
-    /// use swf::Color;
-    ///
-    /// let color = Color::from_rgb(0xFF00FF, 255);
-    /// assert_eq!(color.to_rgba(), 0xFFFF00FF);
-    /// ```
-    pub const fn to_rgba(&self) -> u32 {
-        u32::from_le_bytes([self.b, self.g, self.r, self.a])
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -743,8 +462,9 @@ pub struct GradientBevelFilter {
     pub num_passes: u8,
 }
 
-#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
+#[derive(Default, Clone, Copy, Debug, Eq, FromPrimitive, PartialEq, Enum)]
 pub enum BlendMode {
+    #[default]
     Normal = 0,
     Layer = 2,
     Multiply = 3,
@@ -770,9 +490,50 @@ impl BlendMode {
     }
 }
 
-impl Default for BlendMode {
-    fn default() -> Self {
-        BlendMode::Normal
+impl Display for BlendMode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let s = match *self {
+            BlendMode::Normal => "normal",
+            BlendMode::Layer => "layer",
+            BlendMode::Multiply => "multiply",
+            BlendMode::Screen => "screen",
+            BlendMode::Lighten => "lighten",
+            BlendMode::Darken => "darken",
+            BlendMode::Difference => "difference",
+            BlendMode::Add => "add",
+            BlendMode::Subtract => "subtract",
+            BlendMode::Invert => "invert",
+            BlendMode::Alpha => "alpha",
+            BlendMode::Erase => "erase",
+            BlendMode::Overlay => "overlay",
+            BlendMode::HardLight => "hardlight",
+        };
+        f.write_str(s)
+    }
+}
+
+impl FromStr for BlendMode {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mode = match s {
+            "normal" => BlendMode::Normal,
+            "layer" => BlendMode::Layer,
+            "multiply" => BlendMode::Multiply,
+            "screen" => BlendMode::Screen,
+            "lighten" => BlendMode::Lighten,
+            "darken" => BlendMode::Darken,
+            "difference" => BlendMode::Difference,
+            "add" => BlendMode::Add,
+            "subtract" => BlendMode::Subtract,
+            "invert" => BlendMode::Invert,
+            "alpha" => BlendMode::Alpha,
+            "erase" => BlendMode::Erase,
+            "overlay" => BlendMode::Overlay,
+            "hardlight" => BlendMode::HardLight,
+            _ => return Err(()),
+        };
+        Ok(mode)
     }
 }
 
@@ -1304,8 +1065,9 @@ impl Default for LineStyleFlag {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
+#[derive(Default, Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
 pub enum LineCapStyle {
+    #[default]
     Round = 0,
     None = 1,
     Square = 2,
@@ -1318,25 +1080,12 @@ impl LineCapStyle {
     }
 }
 
-impl Default for LineCapStyle {
-    #[inline]
-    fn default() -> Self {
-        Self::Round
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Default, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LineJoinStyle {
+    #[default]
     Round,
     Bevel,
     Miter(Fixed8),
-}
-
-impl Default for LineJoinStyle {
-    #[inline]
-    fn default() -> Self {
-        Self::Round
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, FromPrimitive, PartialEq)]
@@ -1753,7 +1502,7 @@ pub type JpegTables<'a> = &'a [u8];
 
 /// `ProductInfo` contains information about the software used to generate the SWF.
 /// Not documented in the SWF19 reference. Emitted by mxmlc.
-/// See http://wahlers.com.br/claus/blog/undocumented-swf-tags-written-by-mxmlc/
+/// See <http://wahlers.com.br/claus/blog/undocumented-swf-tags-written-by-mxmlc/>
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProductInfo {
     pub product_id: u32,
