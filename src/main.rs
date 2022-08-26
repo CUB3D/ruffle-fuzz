@@ -32,11 +32,11 @@ pub mod swf_generator;
 
 ///*Note*: Only 1 of these should be enabled at a time
 /// Should single opcode fuzz cases be generated
-const OPCODE_FUZZ: bool = true;
+const OPCODE_FUZZ: bool = false;
 /// Should static function fuzz cases be generated
 const STATIC_FUNCTION_FUZZ: bool = false;
 /// Should dynamic function fuzz cases be generated, (function calls on an objet/other value)
-const DYNAMIC_FUNCTION_FUZZ: bool = false;
+const DYNAMIC_FUNCTION_FUZZ: bool = true;
 
 #[cfg(windows)]
 const INPUTS_DIR: &str = ".\\run\\inputs";
@@ -77,6 +77,12 @@ const THREAD_COUNT: i32 = 1;
 
 /// Should low level timeing info be collected, like the time for running the file in each player
 pub const TIMING_DEBUG: bool = false;
+
+/// Should only a single iteration be performed
+pub const SINGLE_ITER: bool = false;
+
+/// Should the input be removed after running a test
+pub const DELETE_SWF: bool = true;
 
 #[derive(Error, Debug)]
 enum MyError {
@@ -134,7 +140,9 @@ async fn open_flash_cmd(bytes: Vec<u8>) -> Result<(String, Duration), MyError> {
         if let Ok(Some(ex)) = popen.wait_timeout(Duration::from_millis(100)) {
             if !ex.success() {
                 tracing::info!("Flash crashed with {:?}", ex);
-                tokio::fs::remove_file(&path).await?;
+                if DELETE_SWF {
+                    tokio::fs::remove_file(&path).await?;
+                }
                 return Err(MyError::FlashCrash);
             } else {
                 break;
@@ -146,7 +154,9 @@ async fn open_flash_cmd(bytes: Vec<u8>) -> Result<(String, Duration), MyError> {
     popen.terminate()?;
     drop(popen);
 
-    tokio::fs::remove_file(&path).await?;
+    if DELETE_SWF {
+        tokio::fs::remove_file(&path).await?;
+    }
 
     Ok((log_content, Instant::now() - flash_start))
 }
@@ -204,6 +214,11 @@ async fn open_ruffle(bytes: Vec<u8>) -> Result<(String, Duration), MyError> {
 
         let out = lock.log_backend().__fuzz__get_log_string();
         if out.contains("#CASE_") {
+            lock.set_is_playing(false);
+        }
+
+        if Instant::now().duration_since(ruffle_start) > Duration::from_secs(30) {
+            println!("Ruffle timed out, run > 30s");
             lock.set_is_playing(false);
         }
     }
@@ -300,6 +315,10 @@ fn fuzz(shared_state: Arc<SharedFuzzState>) -> Result<(), Box<dyn Error>> {
                 &specific_failure_dir.join("flash.txt"),
                 flash_res,
             ))?;
+        }
+
+        if SINGLE_ITER {
+            std::process::exit(0);
         }
 
         if TIMING_DEBUG {
