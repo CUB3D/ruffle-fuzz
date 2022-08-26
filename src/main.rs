@@ -1,7 +1,6 @@
+use crate::swf_generator::SwfGenerator;
 use env_logger::Env;
 use md5::Digest;
-use rand::rngs::SmallRng;
-use rand::{Rng, RngCore, SeedableRng, thread_rng};
 use ruffle_core::backend::audio::NullAudioBackend;
 use ruffle_core::backend::log::LogBackend;
 use ruffle_core::backend::navigator::NullNavigatorBackend;
@@ -9,27 +8,22 @@ use ruffle_core::backend::storage::MemoryStorageBackend;
 use ruffle_core::backend::ui::NullUiBackend;
 use ruffle_core::backend::video::NullVideoBackend;
 use ruffle_core::tag_utils::SwfMovie;
+use ruffle_render::backend::null::NullRenderer;
+use ruffle_render::backend::ViewportDimensions;
 use std::cell::RefCell;
 use std::error::Error;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
-use std::ops::RangeInclusive;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use log::{info, warn};
-use ruffle_core::external::{ExternalInterfaceMethod, ExternalInterfaceProvider};
-use ruffle_render::backend::null::NullRenderer;
-use ruffle_render::backend::ViewportDimensions;
 use subprocess::{Exec, Redirection};
-use swf::avm1::types::{Action, Value};
-use swf::{Compression, Header, Rectangle, SwfStr, Tag, Twips};
 use thiserror::Error;
 use tokio::task::JoinError;
-use crate::rng::XorShift;
-use crate::swf_generator::SwfGenerator;
+use rand::SeedableRng;
+use rand::RngCore;
 
 pub mod failure_checker;
 pub mod ptrace_fuzz;
@@ -110,7 +104,7 @@ async fn open_flash_cmd(bytes: Vec<u8>) -> Result<(String, Duration), MyError> {
     //     .truncate(true)
     //     .open(&log_path)?;
 
-    let path = format!("./run/test-{}.swf", SmallRng::from_entropy().next_u32());
+    let path = format!("./run/test-{}.swf", rand::rngs::SmallRng::from_entropy().next_u32());
     tokio::fs::write(&path, bytes).await?;
 
     let cmd = Exec::cmd(FLASH_PLAYER_BINARY)
@@ -193,12 +187,10 @@ async fn open_ruffle(bytes: Vec<u8>) -> Result<(String, Duration), MyError> {
         .with_ui(NullUiBackend::new())
         .build();
 
-
     let mut lock = player.lock().unwrap();
     lock.set_root_movie(movie);
     lock.set_is_playing(true);
     drop(lock);
-
 
     loop {
         let mut lock = player.lock().unwrap();
@@ -240,6 +232,7 @@ fn fuzz(shared_state: Arc<SharedFuzzState>) -> Result<(), Box<dyn Error>> {
         let swf_md5 = loop {
             swf_content.clear();
 
+            swf_generator.reset();
             swf_generator.next_swf(&mut swf_content)?;
             let swf_md5 = md5::compute(&swf_content);
             // If its unique
@@ -287,8 +280,8 @@ fn fuzz(shared_state: Arc<SharedFuzzState>) -> Result<(), Box<dyn Error>> {
 
         // Did we find a mismatch
         if ruffle_res != flash_res {
-            tracing::info!("Found mismatch");
             let new_name = format!("{:x}", swf_md5);
+            tracing::info!("Found mismatch @ {}", new_name);
             let specific_failure_dir = PathBuf::from_str(FAILURES_DIR)
                 .expect("No failures-other dir")
                 .join(new_name);
@@ -317,12 +310,12 @@ fn fuzz(shared_state: Arc<SharedFuzzState>) -> Result<(), Box<dyn Error>> {
 
         if TIMING_DEBUG && overall_duration > Duration::from_secs(1) {
             tracing::info!(
-                    "Iter/s = {}, duration = {:?}, ruffle={:?}, flash={:?}",
-                    iters,
-                    overall_duration / iters,
-                    ruffle_duration / iters,
-                    flash_duration / iters
-                );
+                "Iter/s = {}, duration = {:?}, ruffle={:?}, flash={:?}",
+                iters,
+                overall_duration / iters,
+                ruffle_duration / iters,
+                flash_duration / iters
+            );
             overall_duration = Duration::ZERO;
             ruffle_duration = Duration::ZERO;
             flash_duration = Duration::ZERO;
@@ -390,18 +383,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     let state = Arc::new(SharedFuzzState::default());
 
     let stats_state = Arc::clone(&state);
-    std::thread::spawn(move || {
-        loop {
-            let iters = stats_state.iterations.load(Ordering::SeqCst);
-            stats_state
-                .total_iterations
-                .fetch_add(iters, Ordering::SeqCst);
-            stats_state.iterations.store(0, Ordering::SeqCst);
-            let total_iters = stats_state.total_iterations.load(Ordering::SeqCst);
+    std::thread::spawn(move || loop {
+        let iters = stats_state.iterations.load(Ordering::SeqCst);
+        stats_state
+            .total_iterations
+            .fetch_add(iters, Ordering::SeqCst);
+        stats_state.iterations.store(0, Ordering::SeqCst);
+        let total_iters = stats_state.total_iterations.load(Ordering::SeqCst);
 
-            tracing::info!("Iterations = {}, iters/s = {}", total_iters, iters / 5,);
-            std::thread::sleep(Duration::from_secs(5));
-        }
+        tracing::info!("Iterations = {}, iters/s = {}", total_iters, iters / 5,);
+        std::thread::sleep(Duration::from_secs(5));
     });
 
     // Create thread for each fuzzing job
