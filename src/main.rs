@@ -1,6 +1,11 @@
+use crate::error::MyError;
+use crate::flash_projector_runner::open_flash_cmd;
+use crate::fuzz_session::{fuzz, SharedFuzzState};
 use crate::swf_generator::SwfGenerator;
 use env_logger::Env;
 use md5::Digest;
+use rand::RngCore;
+use rand::SeedableRng;
 use ruffle_core::backend::audio::NullAudioBackend;
 use ruffle_core::backend::log::LogBackend;
 use ruffle_core::backend::navigator::NullNavigatorBackend;
@@ -20,19 +25,14 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use subprocess::{Exec, Redirection};
-use rand::SeedableRng;
-use rand::RngCore;
-use crate::error::MyError;
-use crate::flash_projector_runner::open_flash_cmd;
-use crate::fuzz_session::{fuzz, SharedFuzzState};
 
-pub mod failure_checker;
-pub mod rng;
-pub mod swf_generator;
 pub mod error;
+pub mod failure_checker;
 pub mod flash_projector_runner;
-pub mod ruffle_runner;
 pub mod fuzz_session;
+pub mod rng;
+pub mod ruffle_runner;
+pub mod swf_generator;
 
 ///*Note*: Only 1 of these should be enabled at a time
 /// Should single opcode fuzz cases be generated
@@ -149,11 +149,18 @@ fn main() -> Result<(), Box<dyn Error>> {
                     {
                         let tid = unsafe { libc::pthread_self() };
 
-                        let mut cpu_set: libc::cpu_set_t = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
+                        let mut cpu_set: libc::cpu_set_t =
+                            unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
                         unsafe { libc::CPU_ZERO(&mut cpu_set) };
                         unsafe { libc::CPU_SET(thread_index as usize, &mut cpu_set) };
 
-                        unsafe { libc::sched_setaffinity(tid as i32, core::mem::size_of::<libc::cpu_set_t>(), &cpu_set) };
+                        unsafe {
+                            libc::sched_setaffinity(
+                                tid as i32,
+                                core::mem::size_of::<libc::cpu_set_t>(),
+                                &cpu_set,
+                            )
+                        };
                     }
                 }
 

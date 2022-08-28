@@ -1,12 +1,12 @@
+use crate::ruffle_runner::open_ruffle;
+use crate::{open_flash_cmd, MyError, SwfGenerator, FAILURES_DIR, SINGLE_ITER, TIMING_DEBUG};
+use md5::Digest;
 use std::error::Error;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use md5::Digest;
-use crate::{FAILURES_DIR, MyError, open_flash_cmd, SINGLE_ITER, SwfGenerator, TIMING_DEBUG};
-use crate::ruffle_runner::open_ruffle;
 
 /// The fuzz state shared between threads
 #[derive(Default)]

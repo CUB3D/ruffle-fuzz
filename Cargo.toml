@@ -6,14 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-subprocess = "0.2.9"
-rand = {version = "0.8.5", features = ["small_rng"]}
-md5 = "0.7.0"
-dirs-next = "2.0.0"
-thiserror = "1.0.31"
-anyhow = "1.0.58"
-
-
 ruffle_core = { path = "./ruffle/core"}
 ruffle_render = { path = "./ruffle/render"}
 swf = { path = "./swf" }
@@ -21,6 +13,11 @@ env_logger = "0.9.0"
 tracing = { version = "0.1.35", features = ["log"] }
 libc = "0.2.132"
 futures = "0.3.23"
+thiserror = "1.0.32"
+dirs-next = "2.0.0"
+md5 = "0.7.0"
+rand = "0.8.5"
+subprocess = "0.2.9"
 
 [features]
 default = ["flash_file_injection"]

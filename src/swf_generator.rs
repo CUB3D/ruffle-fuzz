@@ -1,10 +1,10 @@
-use std::borrow::Cow;
 use crate::{
-    DYNAMIC_FUNCTION_FUZZ, FUZZ_DOUBLE_NAN, FUZZ_INT_STRING, FUZZ_RANDOM_INT,
-    FUZZ_RANDOM_STRING, OPCODE_FUZZ, RANDOM_SWF_VERSION, STATIC_FUNCTION_FUZZ,
+    DYNAMIC_FUNCTION_FUZZ, FUZZ_DOUBLE_NAN, FUZZ_INT_STRING, FUZZ_RANDOM_INT, FUZZ_RANDOM_STRING,
+    OPCODE_FUZZ, RANDOM_SWF_VERSION, STATIC_FUNCTION_FUZZ,
 };
-use rand::rngs::SmallRng;
+use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
+use std::borrow::Cow;
 use std::error::Error;
 use std::ops::RangeInclusive;
 use swf::avm1::types::{Action, GetUrl, If, Push, Value};
@@ -39,7 +39,7 @@ pub enum SimpleValue<'v> {
 
 pub struct DoActionGenerator<'c> {
     strings: &'c mut Vec<Vec<u8>>,
-    rng: &'c mut SmallRng,
+    rng: &'c mut StdRng,
     w: Writer<&'c mut Vec<u8>>,
 }
 
@@ -74,9 +74,7 @@ impl<'c> DoActionGenerator<'c> {
                         let v2 = self.random_value_simple(recursion_depth + 1);
                         members.push((v, v2));
                     }
-                    SimpleValue::Object(SimpleObject {
-                        members
-                    })
+                    SimpleValue::Object(SimpleObject { members })
                 }
             }
             8 => {
@@ -88,16 +86,14 @@ impl<'c> DoActionGenerator<'c> {
                         let v = self.random_value_simple(recursion_depth + 1);
                         members.push(v);
                     }
-                    SimpleValue::Array(SimpleArray {
-                        members
-                    })
+                    SimpleValue::Array(SimpleArray { members })
                 }
-            },
-            _ => unreachable!()
+            }
+            _ => unreachable!(),
         }
     }
 
-    pub fn push<'v>(&mut self, sv: SimpleValue<'v>) -> Result<(), Box<dyn Error>>{
+    pub fn push<'v>(&mut self, sv: SimpleValue<'v>) -> Result<(), Box<dyn Error>> {
         match sv {
             SimpleValue::Undefined => {
                 self.w.write_action(&Action::Push(Push {
@@ -132,9 +128,8 @@ impl<'c> DoActionGenerator<'c> {
             SimpleValue::String(s) => {
                 self.strings.push(s.as_bytes().to_owned());
                 let ss = Value::Str(SwfStr::from_bytes(self.strings.last().unwrap().as_slice()));
-                self.w.write_action(&Action::Push(Push {
-                    values: vec![ss],
-                }))?;
+                self.w
+                    .write_action(&Action::Push(Push { values: vec![ss] }))?;
             }
             SimpleValue::Object(so) => {
                 for (name, v) in so.members.iter().cloned() {
@@ -237,7 +232,7 @@ impl<'c> DoActionGenerator<'c> {
     }
 
     fn random_value<'val, 'strings: 'val>(
-        rng: &mut rand::rngs::SmallRng,
+        rng: &mut StdRng,
         strings: &'strings mut Vec<Vec<u8>>,
     ) -> Value<'val> {
         match rng.gen_range(0..=6) {
@@ -375,7 +370,6 @@ impl<'c> DoActionGenerator<'c> {
         // Get foo
         self.push(SimpleValue::String(Cow::Borrowed("foo")))?;
 
-
         self.w.write_action(&Action::GetVariable)?;
 
         // Call foo.<function_name>()
@@ -391,9 +385,7 @@ impl<'c> DoActionGenerator<'c> {
         //TODO: pay attention to types of args
     }
 
-    pub fn opcode_fuzz(
-        &mut self,
-    ) -> Result<(), Box<dyn Error>> {
+    pub fn opcode_fuzz(&mut self) -> Result<(), Box<dyn Error>> {
         self.push(SimpleValue::String(Cow::Borrowed("#PREFIX#")))?;
 
         //TODO: ActionAdd produces errors in some cases
@@ -434,7 +426,7 @@ impl<'c> DoActionGenerator<'c> {
             (Action::MBCharToAscii, 1),
             (Action::MBStringExtract, 3),
             (Action::MBStringLength, 1),
-            (Action::Modulo, 2), //TODO: doubles dont match
+            (Action::Modulo, 2),   //TODO: doubles dont match
             (Action::Multiply, 2), //TODO: doubles dont match
             //_
             (Action::Not, 1),
@@ -482,14 +474,14 @@ impl<'c> DoActionGenerator<'c> {
 }
 
 pub struct SwfGenerator {
-    rng: SmallRng,
+    rng: StdRng,
     strings: Vec<Vec<u8>>,
     do_action_bytes: Vec<u8>,
 }
 
 impl SwfGenerator {
     pub fn new() -> Self {
-        let rng = SmallRng::from_entropy();
+        let rng = StdRng::from_entropy();
 
         Self {
             rng,

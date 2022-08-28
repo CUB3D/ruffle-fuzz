@@ -1,7 +1,6 @@
 //! Runner for running a fuzz case through Ruffle and extracting the output
 
-use std::cell::RefCell;
-use std::time::{Duration, Instant};
+use crate::MyError;
 use ruffle_core::backend::audio::NullAudioBackend;
 use ruffle_core::backend::log::LogBackend;
 use ruffle_core::backend::navigator::NullNavigatorBackend;
@@ -11,7 +10,8 @@ use ruffle_core::backend::video::NullVideoBackend;
 use ruffle_core::tag_utils::SwfMovie;
 use ruffle_render::backend::null::NullRenderer;
 use ruffle_render::backend::ViewportDimensions;
-use crate::MyError;
+use std::cell::RefCell;
+use std::time::{Duration, Instant};
 
 #[derive(Default)]
 struct StringLogger {

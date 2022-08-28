@@ -1,7 +1,8 @@
-use crate::FAILURES_DIR;
 use crate::ruffle_runner::open_ruffle;
+use crate::FAILURES_DIR;
+use std::error::Error;
 
-pub async fn check_failures() -> anyhow::Result<()> {
+pub async fn check_failures() -> Result<(), Box<dyn Error>> {
     let dir = std::fs::read_dir(FAILURES_DIR)?;
 
     let mut total = 0;

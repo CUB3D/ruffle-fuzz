@@ -1,10 +1,9 @@
+use crate::{MyError, DELETE_SWF, FLASH_PLAYER_BINARY};
+use rand::{RngCore, SeedableRng};
 ///! Support for running a fuzz case under flash projector and gathering output
-
 use std::io::Read;
 use std::time::{Duration, Instant};
-use rand::{RngCore, SeedableRng};
 use subprocess::{Exec, Redirection};
-use crate::{DELETE_SWF, FLASH_PLAYER_BINARY, MyError};
 
 pub async fn open_flash_cmd(bytes: Vec<u8>) -> Result<(String, Duration), MyError> {
     let flash_start = Instant::now();
@@ -17,7 +16,10 @@ pub async fn open_flash_cmd(bytes: Vec<u8>) -> Result<(String, Duration), MyErro
     //     .truncate(true)
     //     .open(&log_path)?;
 
-    let path = format!("./run/test-{}.swf", rand::rngs::SmallRng::from_entropy().next_u32());
+    let path = format!(
+        "./run/test-{}.swf",
+        rand::rngs::SmallRng::from_entropy().next_u32()
+    );
     std::fs::write(&path, bytes)?;
 
     let cmd = Exec::cmd(FLASH_PLAYER_BINARY)

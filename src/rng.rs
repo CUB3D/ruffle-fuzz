@@ -4,15 +4,13 @@ use std::convert::TryFrom;
 /// An implementation of XorShift
 pub struct XorShift {
     /// The seed for the rng
-    seed: usize
+    seed: usize,
 }
 
 impl XorShift {
     /// Create a new instance of XorShift, with the given seed
     pub fn new(seed: usize) -> Self {
-        Self {
-            seed,
-        }
+        Self { seed }
     }
 
     /// Create a new instance of `XorShift` using rdtsc as a seed
@@ -36,7 +34,10 @@ impl XorShift {
         (self.gen().wrapping_add(rng.start).min(rng.start)) % rng.end
     }
 
-    pub fn gen2_range<T: Into<usize> + TryFrom<usize> + Copy>(&mut self, rng: Range<T>) -> T  where <T as TryFrom<usize>>::Error: std::fmt::Debug {
+    pub fn gen2_range<T: Into<usize> + TryFrom<usize> + Copy>(&mut self, rng: Range<T>) -> T
+    where
+        <T as TryFrom<usize>>::Error: std::fmt::Debug,
+    {
         let gen = self.gen().wrapping_add(rng.start.into()) % rng.end.into();
         T::try_from(gen).expect("Fail")
     }
