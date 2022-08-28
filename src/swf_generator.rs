@@ -1,6 +1,6 @@
 use crate::{
     DYNAMIC_FUNCTION_FUZZ, FUZZ_DOUBLE_NAN, FUZZ_INT_STRING, FUZZ_RANDOM_INT, FUZZ_RANDOM_STRING,
-    OPCODE_FUZZ, RANDOM_SWF_VERSION, STATIC_FUNCTION_FUZZ,
+    OPCODE_FUZZ, RANDOM_SWF_VERSION, STATIC_FUNCTION_FUZZ, TESTS_PER_FUZZ_CASE,
 };
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -551,19 +551,16 @@ impl SwfGenerator {
         let swf_header = self.swf_header(swf_version);
         let mut dag = self.do_action_generator(swf_version);
 
-        if DYNAMIC_FUNCTION_FUZZ {
-            for _ in 0..10 {
+        for _ in 0..TESTS_PER_FUZZ_CASE {
+            if DYNAMIC_FUNCTION_FUZZ {
                 dag.dynamic_function_fuzz()?;
             }
-        }
+            if STATIC_FUNCTION_FUZZ {
+                dag.static_function_fuzz()?;
+            }
 
-        if STATIC_FUNCTION_FUZZ {
-            dag.static_function_fuzz()?;
-        }
-
-        //TODO: we need a way to generate objects, e.g point
-        if OPCODE_FUZZ {
-            for _ in 0..1 {
+            //TODO: we need a way to generate objects, e.g point
+            if OPCODE_FUZZ {
                 dag.opcode_fuzz()?;
             }
         }

@@ -16,9 +16,11 @@ pub struct SharedFuzzState {
 
     pub iterations: AtomicUsize,
     pub total_iterations: AtomicUsize,
+    pub mismatches: AtomicUsize,
+    pub flash_crashes: AtomicUsize,
 }
 
-pub fn fuzz(shared_state: Arc<SharedFuzzState>) -> Result<(), Box<dyn Error>> {
+pub fn fuzz(shared_state: Arc<SharedFuzzState>, worker_id: u32) -> Result<(), Box<dyn Error>> {
     let mut overall_duration = Duration::ZERO;
     let mut ruffle_duration = Duration::ZERO;
     let mut flash_duration = Duration::ZERO;
@@ -54,7 +56,7 @@ pub fn fuzz(shared_state: Arc<SharedFuzzState>) -> Result<(), Box<dyn Error>> {
 
         let (ruffle_result, flash_result) = futures::executor::block_on(async {
             let ruffle_res = open_ruffle(swf_content.clone()).await;
-            let flash_res = open_flash_cmd(swf_content.clone()).await;
+            let flash_res = open_flash_cmd(swf_content.clone(), worker_id).await;
 
             (ruffle_res, flash_res)
         });
@@ -63,6 +65,7 @@ pub fn fuzz(shared_state: Arc<SharedFuzzState>) -> Result<(), Box<dyn Error>> {
             Ok(x) => Ok(x),
             Err(MyError::FlashCrash) => {
                 tracing::info!("Flash crash detected, ignoring input");
+                shared_state.flash_crashes.fetch_add(1, Ordering::SeqCst);
                 continue;
             }
             Err(e) => Err(e),
@@ -80,6 +83,7 @@ pub fn fuzz(shared_state: Arc<SharedFuzzState>) -> Result<(), Box<dyn Error>> {
         if ruffle_res != flash_res {
             let new_name = format!("{:x}", swf_md5);
             tracing::info!("Found mismatch @ {}", new_name);
+            shared_state.mismatches.fetch_add(1, Ordering::SeqCst);
             let specific_failure_dir = PathBuf::from_str(FAILURES_DIR)
                 .expect("No failures-other dir")
                 .join(new_name);

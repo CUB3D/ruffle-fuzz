@@ -1,0 +1,158 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 2bcddc20..b717cac0 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -1947,26 +1947,6 @@ version = "0.2.126"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "349d5a591cd28b49e1d1037471617a32ddcda5731b99419008085f72d5a53836"
+ 
+-[[package]]
+-name = "libflate"
+-version = "1.2.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "05605ab2bce11bcfc0e9c635ff29ef8b2ea83f29be257ee7d730cac3ee373093"
+-dependencies = [
+- "adler32",
+- "crc32fast",
+- "libflate_lz77",
+-]
+-
+-[[package]]
+-name = "libflate_lz77"
+-version = "1.1.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "39a734c0493409afcd49deee13c006a04e3586b9761a03543c6272c9c51f2f5a"
+-dependencies = [
+- "rle-decode-fast",
+-]
+-
+ [[package]]
+ name = "libloading"
+ version = "0.7.3"
+@@ -2989,12 +2969,6 @@ dependencies = [
+  "windows",
+ ]
+ 
+-[[package]]
+-name = "rle-decode-fast"
+-version = "1.0.3"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "3582f63211428f83597b51b2ddb88e2a91a9d52d12831f9d08f5e624e8977422"
+-
+ [[package]]
+ name = "ron"
+ version = "0.7.1"
+@@ -3498,7 +3472,6 @@ dependencies = [
+  "encoding_rs",
+  "enum-map",
+  "flate2",
+- "libflate",
+  "log",
+  "lzma-rs",
+  "num-derive",
+diff --git a/Cargo.toml b/Cargo.toml
+index 53911686..d8bf2255 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -4,7 +4,6 @@ members = [
+     "core/macros",
+     "core/build_playerglobal",
+     "desktop",
+-    "swf",
+     "web",
+     "web/packages/extension/safari",
+     "wstr",
+diff --git a/core/Cargo.toml b/core/Cargo.toml
+index af259216..242ce71f 100644
+--- a/core/Cargo.toml
++++ b/core/Cargo.toml
+@@ -18,7 +18,7 @@ minimp3 = { version = "0.5.1", optional = true }
+ ruffle_render = { path = "../render" }
+ ruffle_macros = { path = "macros" }
+ ruffle_wstr = { path = "../wstr" }
+-swf = { path = "../swf" }
++swf = { path = "../../swf" }
+ bitflags = "1.3.2"
+ smallvec = { version = "1.9.0", features = ["union"] }
+ num-traits = "0.2"
+diff --git a/core/build_playerglobal/Cargo.toml b/core/build_playerglobal/Cargo.toml
+index 79818ea6..1660f747 100644
+--- a/core/build_playerglobal/Cargo.toml
++++ b/core/build_playerglobal/Cargo.toml
+@@ -7,4 +7,4 @@ edition = "2021"
+ convert_case = "0.5.0"
+ proc-macro2 = "1.0.43"
+ quote = "1.0.21"
+-swf = { path = "../../swf" }
++swf = { path = "../../../swf" }
+diff --git a/core/src/avm1/error.rs b/core/src/avm1/error.rs
+index a7f3fc03..d7c1bd21 100644
+--- a/core/src/avm1/error.rs
++++ b/core/src/avm1/error.rs
+@@ -20,4 +20,7 @@ pub enum Error<'gc> {
+ 
+     #[error("A script has thrown a custom error.")]
+     ThrownValue(Value<'gc>),
++
++    #[error("FsCommand: quit recieved")]
++    ExecutionTerminated,
+ }
+diff --git a/core/src/avm1/fscommand.rs b/core/src/avm1/fscommand.rs
+index f01def37..93aac68c 100644
+--- a/core/src/avm1/fscommand.rs
++++ b/core/src/avm1/fscommand.rs
+@@ -28,6 +28,10 @@ pub fn handle<'gc>(
+     let command = command.to_utf8_lossy();
+     let args = args.to_utf8_lossy();
+ 
++    if command == "quit" {
++        return Err(Error::ExecutionTerminated);
++    }
++
+     if !activation
+         .context
+         .external_interface
+diff --git a/core/src/backend/log.rs b/core/src/backend/log.rs
+index 2f2b0fa2..8ff5c535 100644
+--- a/core/src/backend/log.rs
++++ b/core/src/backend/log.rs
+@@ -1,5 +1,6 @@
+ pub trait LogBackend {
+     fn avm_trace(&self, message: &str);
++    fn __fuzz__get_log_string(&self) -> String { String::new() }
+ }
+ 
+ /// Logging backend that just reroutes traces to the log crate
+diff --git a/render/Cargo.toml b/render/Cargo.toml
+index 1cd84666..bc12fa7f 100644
+--- a/render/Cargo.toml
++++ b/render/Cargo.toml
+@@ -6,7 +6,7 @@ edition = "2021"
+ license = "MIT OR Apache-2.0"
+ 
+ [dependencies]
+-swf = {path = "../swf"}
++swf = {path = "../../swf"}
+ gc-arena = { git = "https://github.com/ruffle-rs/gc-arena" }
+ log = "0.4"
+ gif = "0.11.4"
+@@ -25,4 +25,4 @@ approx = "0.5.1"
+ 
+ [features]
+ default = []
+-tessellator = ["lyon"]
+\ No newline at end of file
++tessellator = ["lyon"]
+diff --git a/scanner/Cargo.toml b/scanner/Cargo.toml
+index 98030cd8..fd393a3c 100644
+--- a/scanner/Cargo.toml
++++ b/scanner/Cargo.toml
+@@ -14,7 +14,7 @@ serde = { version = "1.0", features = ["derive"] }
+ csv = "1.1"
+ indicatif = "0.17"
+ path-slash = "0.2.1"
+-swf = { path = "../swf" }
++swf = { path = "../../swf" }
+ rayon = "1.5.3"
+ crossbeam-channel = "0.5"
+ sha2 = "0.10.2"

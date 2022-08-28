@@ -4,27 +4,13 @@ use crate::fuzz_session::{fuzz, SharedFuzzState};
 use crate::swf_generator::SwfGenerator;
 use env_logger::Env;
 
-
-
-
-
-
-
-
-
-
-
-
-
 use std::error::Error;
 use std::fs::OpenOptions;
-use std::io::{Write};
+use std::io::Write;
 
-
-use std::sync::atomic::{Ordering};
-use std::sync::{Arc};
-use std::time::{Duration};
-
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::time::Duration;
 
 pub mod error;
 pub mod failure_checker;
@@ -77,7 +63,7 @@ const FUZZ_DOUBLE_NAN: bool = false;
 const RANDOM_SWF_VERSION: bool = false;
 
 /// Number of threads to use
-const THREAD_COUNT: i32 = 1;
+const THREAD_COUNT: i32 = 32;
 
 /// Should threads be pinned to cores
 const PIN_THREADS: bool = true;
@@ -90,6 +76,8 @@ pub const SINGLE_ITER: bool = false;
 
 /// Should the input be removed after running a test
 pub const DELETE_SWF: bool = false;
+
+pub const TESTS_PER_FUZZ_CASE: usize = 15;
 
 /// Empty the flash log file, this avoids a crash were the file is missing
 fn clear_flash_log() -> Result<(), Box<dyn Error>> {
@@ -133,8 +121,17 @@ fn main() -> Result<(), Box<dyn Error>> {
             .fetch_add(iters, Ordering::SeqCst);
         stats_state.iterations.store(0, Ordering::SeqCst);
         let total_iters = stats_state.total_iterations.load(Ordering::SeqCst);
+        let desc = stats_state.mismatches.load(Ordering::SeqCst);
+        let crashes = stats_state.flash_crashes.load(Ordering::SeqCst);
 
-        tracing::info!("Iterations = {}, iters/s = {}", total_iters, iters / 5,);
+        tracing::info!(
+            "Iterations = {} (Mult = {}), iters/s = {}, Discrepancies = {}, Flash Crashes = {}",
+            total_iters,
+            total_iters * TESTS_PER_FUZZ_CASE,
+            iters / 5,
+            desc,
+            crashes
+        );
         std::thread::sleep(Duration::from_secs(5));
     });
 
@@ -165,7 +162,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
 
                 // Start fuzzing
-                fuzz(state_copy).expect("Thread failed");
+                fuzz(state_copy, thread_index as _).expect("Thread failed");
             })
         })
         .collect::<Vec<_>>();
