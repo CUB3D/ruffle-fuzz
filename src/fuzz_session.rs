@@ -35,9 +35,6 @@ pub fn fuzz(shared_state: Arc<SharedFuzzState>, worker_id: u32) -> Result<(), Bo
         // Keep generating until we produce a unique swf
         let mut warning_shown = false;
 
-        ruffle_content.clear();
-        flash_content.clear();
-
         let swf_md5 = loop {
             swf_content.clear();
 
@@ -60,7 +57,9 @@ pub fn fuzz(shared_state: Arc<SharedFuzzState>, worker_id: u32) -> Result<(), Bo
             }
         };
 
+        ruffle_content.clear();
         ruffle_content.extend_from_slice(&swf_content);
+        flash_content.clear();
         flash_content.extend_from_slice(&swf_content);
 
         let (ruffle_result, flash_result) = futures::executor::block_on(async {
