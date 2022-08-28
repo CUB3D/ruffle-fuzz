@@ -4,7 +4,7 @@ use std::io::Read;
 use std::time::{Duration, Instant};
 use subprocess::{Exec, Redirection};
 
-pub async fn open_flash_cmd(bytes: Vec<u8>, worker_id: u32) -> Result<(String, Duration), MyError> {
+pub async fn open_flash_cmd(bytes: &[u8], worker_id: u32) -> Result<(String, Duration), MyError> {
     let flash_start = Instant::now();
 
     // let mut log_path = dirs_next::config_dir().expect("No config dir");
@@ -21,7 +21,7 @@ pub async fn open_flash_cmd(bytes: Vec<u8>, worker_id: u32) -> Result<(String, D
     let cmd = Exec::cmd(FLASH_PLAYER_BINARY)
         .env("LD_PRELOAD", "./utils/path-mapping.so")
         // .env("DISPLAY", ":2")
-        .args(&[path.clone()])
+        .args(&[&path])
         .stderr(Redirection::File(std::fs::File::open("/dev/null").unwrap()))
         .stdout(Redirection::Pipe)
         .detached();

@@ -43,9 +43,9 @@ impl XorShift {
     }
 
     /// Select a random item from a slice
-    pub fn select<T: Clone>(&mut self, options: &[T]) -> T {
+    pub fn select<T: Copy>(&mut self, options: &[T]) -> T {
         let index = self.gen_range(0..options.len());
-        options[index].clone()
+        options[index]
     }
 
     pub fn one_of<R, T: Fn(&mut XorShift) -> R>(&mut self, fns: &[T]) -> R {

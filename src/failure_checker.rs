@@ -18,7 +18,7 @@ pub async fn check_failures() -> Result<(), Box<dyn Error>> {
         let swf_content = std::fs::read(swf_path)?;
 
         //TODO:
-        let (ruffle_res, _) = open_ruffle(swf_content).await?;
+        let (ruffle_res, _) = open_ruffle(&swf_content).await?;
         let expected = std::fs::read_to_string(flash_output_path.to_str().unwrap())?;
 
         if ruffle_res != expected {

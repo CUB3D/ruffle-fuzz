@@ -88,7 +88,7 @@ impl<'c> DoActionGenerator<'c> {
         }
     }
 
-    pub fn push(&mut self, sv: SimpleValue<'_>) -> Result<(), Box<dyn Error>> {
+    pub fn push(&mut self, sv: &SimpleValue<'_>) -> Result<(), Box<dyn Error>> {
         match sv {
             SimpleValue::Undefined => {
                 self.w.write_action(&Action::Push(Push {
@@ -102,22 +102,22 @@ impl<'c> DoActionGenerator<'c> {
             }
             SimpleValue::Int(x) => {
                 self.w.write_action(&Action::Push(Push {
-                    values: vec![Value::Int(x)],
+                    values: vec![Value::Int(*x)],
                 }))?;
             }
             SimpleValue::Bool(b) => {
                 self.w.write_action(&Action::Push(Push {
-                    values: vec![Value::Bool(b)],
+                    values: vec![Value::Bool(*b)],
                 }))?;
             }
             SimpleValue::Double(d) => {
                 self.w.write_action(&Action::Push(Push {
-                    values: vec![Value::Double(d)],
+                    values: vec![Value::Double(*d)],
                 }))?;
             }
             SimpleValue::Float(f) => {
                 self.w.write_action(&Action::Push(Push {
-                    values: vec![Value::Float(f)],
+                    values: vec![Value::Float(*f)],
                 }))?;
             }
             SimpleValue::String(s) => {
@@ -127,7 +127,7 @@ impl<'c> DoActionGenerator<'c> {
                     .write_action(&Action::Push(Push { values: vec![ss] }))?;
             }
             SimpleValue::Object(so) => {
-                for (name, v) in so.members.iter().cloned() {
+                for (name, v) in so.members.iter() {
                     self.push(name)?;
                     self.push(v)?;
                 }
@@ -139,7 +139,7 @@ impl<'c> DoActionGenerator<'c> {
                 self.w.write_action(&Action::InitObject)?;
             }
             SimpleValue::Array(sa) => {
-                for v in sa.members.iter().cloned() {
+                for v in sa.members.iter() {
                     self.push(v)?;
                 }
 
@@ -154,7 +154,7 @@ impl<'c> DoActionGenerator<'c> {
     }
 
     pub fn static_function_fuzz(&mut self) -> Result<(), Box<dyn Error>> {
-        self.push(SimpleValue::String(Cow::Borrowed("#PREFIX#")))?;
+        self.push(&SimpleValue::String(Cow::Borrowed("#PREFIX#")))?;
 
         let static_methods = &[
             ("Accessibility", "isActive", 0..=0),
@@ -296,7 +296,7 @@ impl<'c> DoActionGenerator<'c> {
     }
 
     pub fn dynamic_function_fuzz(&mut self) -> Result<(), Box<dyn Error>> {
-        self.push(SimpleValue::String(Cow::Borrowed("#PREFIX#")))?;
+        self.push(&SimpleValue::String(Cow::Borrowed("#PREFIX#")))?;
 
         //TODO: support for flash.foo.bar.Thing
         //TODO: looks like ruffle has a bug where flash.geom.Point can be referenced as just Point, hmm maybe try fuzzing for that
@@ -333,7 +333,7 @@ impl<'c> DoActionGenerator<'c> {
         let arg_count = self.rng.gen_range(0..=*constructor_arg_range.end());
 
         // The name of the object
-        self.push(SimpleValue::String(Cow::Borrowed("foo")))?;
+        self.push(&SimpleValue::String(Cow::Borrowed("foo")))?;
 
         // Push the args
         for _ in 0..arg_count {
@@ -343,8 +343,8 @@ impl<'c> DoActionGenerator<'c> {
         }
 
         // The name, the arg count
-        self.push(SimpleValue::Int(arg_count))?;
-        self.push(SimpleValue::String(Cow::Borrowed(class_name)))?;
+        self.push(&SimpleValue::Int(arg_count))?;
+        self.push(&SimpleValue::String(Cow::Borrowed(class_name)))?;
         self.w.write_action(&Action::NewObject)?;
         self.w.write_action(&Action::DefineLocal)?;
 
@@ -363,12 +363,12 @@ impl<'c> DoActionGenerator<'c> {
         }))?;
 
         // Get foo
-        self.push(SimpleValue::String(Cow::Borrowed("foo")))?;
+        self.push(&SimpleValue::String(Cow::Borrowed("foo")))?;
 
         self.w.write_action(&Action::GetVariable)?;
 
         // Call foo.<function_name>()
-        self.push(SimpleValue::String(Cow::Borrowed(function_name)))?;
+        self.push(&SimpleValue::String(Cow::Borrowed(function_name)))?;
         self.w.write_action(&Action::CallMethod)?;
 
         SwfGenerator::dump_stack(&mut self.w)?;
@@ -381,7 +381,7 @@ impl<'c> DoActionGenerator<'c> {
     }
 
     pub fn opcode_fuzz(&mut self) -> Result<(), Box<dyn Error>> {
-        self.push(SimpleValue::String(Cow::Borrowed("#PREFIX#")))?;
+        self.push(&SimpleValue::String(Cow::Borrowed("#PREFIX#")))?;
 
         //TODO: ActionAdd produces errors in some cases
         // todo: so does less
@@ -457,7 +457,7 @@ impl<'c> DoActionGenerator<'c> {
 
         for _ in 0..arg_count {
             let v = self.random_value_simple(0);
-            self.push(v)?;
+            self.push(&v)?;
         }
         // Testing arithmetic ops
         self.w.write_action(&action)?;

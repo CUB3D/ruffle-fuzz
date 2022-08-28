@@ -29,7 +29,7 @@ impl LogBackend for StringLogger {
     }
 }
 
-pub async fn open_ruffle(bytes: Vec<u8>) -> Result<(String, Duration), MyError> {
+pub async fn open_ruffle(bytes: &[u8]) -> Result<(String, Duration), MyError> {
     let ruffle_start = Instant::now();
 
     let movie = SwfMovie::from_data(&bytes, None, None).expect("Load movie fail");

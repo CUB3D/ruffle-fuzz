@@ -26,12 +26,18 @@ pub fn fuzz(shared_state: Arc<SharedFuzzState>, worker_id: u32) -> Result<(), Bo
     let mut flash_duration = Duration::ZERO;
     let mut iters = 0;
     let mut swf_content = Vec::with_capacity(1024);
+    let mut ruffle_content = Vec::with_capacity(1024);
+    let mut flash_content = Vec::with_capacity(1024);
     let mut swf_generator = SwfGenerator::new();
 
     loop {
         let start = Instant::now();
         // Keep generating until we produce a unique swf
         let mut warning_shown = false;
+
+        ruffle_content.clear();
+        flash_content.clear();
+
         let swf_md5 = loop {
             swf_content.clear();
 
@@ -54,9 +60,12 @@ pub fn fuzz(shared_state: Arc<SharedFuzzState>, worker_id: u32) -> Result<(), Bo
             }
         };
 
+        ruffle_content.extend_from_slice(&swf_content);
+        flash_content.extend_from_slice(&swf_content);
+
         let (ruffle_result, flash_result) = futures::executor::block_on(async {
-            let ruffle_res = open_ruffle(swf_content.clone()).await;
-            let flash_res = open_flash_cmd(swf_content.clone(), worker_id).await;
+            let ruffle_res = open_ruffle(&ruffle_content).await;
+            let flash_res = open_flash_cmd(&flash_content, worker_id).await;
 
             (ruffle_res, flash_res)
         });
