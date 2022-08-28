@@ -3,8 +3,6 @@ services:
   fuzzer:
     build: .
     image: flash-fuzz_fuzzer
-    deploy:
-      replicas: 24
     volumes:
     - failures:/home/code/run/failures/
 
