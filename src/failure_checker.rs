@@ -1,5 +1,5 @@
-use crate::open_ruffle;
 use crate::FAILURES_DIR;
+use crate::ruffle_runner::open_ruffle;
 
 pub async fn check_failures() -> anyhow::Result<()> {
     let dir = std::fs::read_dir(FAILURES_DIR)?;

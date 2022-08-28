@@ -13,7 +13,6 @@ md5 = "0.7.0"
 dirs-next = "2.0.0"
 thiserror = "1.0.31"
 tokio = {version = "1.19.2", features = ["macros", "fs", "rt"]}
-ptrace = { path = "./ptrace", features = ["breakpoints"] }
 ruffle_core = { path = "./ruffle/core"}
 ruffle_render = { path = "./ruffle/render"}
 
