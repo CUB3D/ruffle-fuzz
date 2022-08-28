@@ -18,7 +18,7 @@ pub async fn open_flash_cmd(bytes: Vec<u8>) -> Result<(String, Duration), MyErro
     //     .open(&log_path)?;
 
     let path = format!("./run/test-{}.swf", rand::rngs::SmallRng::from_entropy().next_u32());
-    tokio::fs::write(&path, bytes).await?;
+    std::fs::write(&path, bytes)?;
 
     let cmd = Exec::cmd(FLASH_PLAYER_BINARY)
         .env("LD_PRELOAD", "./utils/path-mapping.so")
@@ -53,7 +53,7 @@ pub async fn open_flash_cmd(bytes: Vec<u8>) -> Result<(String, Duration), MyErro
             if !ex.success() {
                 tracing::info!("Flash crashed with {:?}", ex);
                 if DELETE_SWF {
-                    tokio::fs::remove_file(&path).await?;
+                    std::fs::remove_file(&path)?;
                 }
                 return Err(MyError::FlashCrash);
             } else {
@@ -67,7 +67,7 @@ pub async fn open_flash_cmd(bytes: Vec<u8>) -> Result<(String, Duration), MyErro
     drop(popen);
 
     if DELETE_SWF {
-        tokio::fs::remove_file(&path).await?;
+        std::fs::remove_file(&path)?;
     }
 
     Ok((log_content, Instant::now() - flash_start))

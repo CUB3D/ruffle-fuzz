@@ -14,7 +14,7 @@ pub async fn check_failures() -> anyhow::Result<()> {
     {
         let swf_path = entry.path().join("out.swf");
         let flash_output_path = entry.path().join("flash.txt");
-        let swf_content = tokio::fs::read(swf_path).await?;
+        let swf_content = std::fs::read(swf_path)?;
 
         //TODO:
         let (ruffle_res, _) = open_ruffle(swf_content).await?;

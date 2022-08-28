@@ -7,22 +7,20 @@ edition = "2021"
 
 [dependencies]
 subprocess = "0.2.9"
-swf = { path = "./swf" }
 rand = {version = "0.8.5", features = ["small_rng"]}
 md5 = "0.7.0"
 dirs-next = "2.0.0"
 thiserror = "1.0.31"
-tokio = {version = "1.19.2", features = ["macros", "fs", "rt"]}
+anyhow = "1.0.58"
+
+
 ruffle_core = { path = "./ruffle/core"}
 ruffle_render = { path = "./ruffle/render"}
-
-log = "0.4.17"
+swf = { path = "./swf" }
 env_logger = "0.9.0"
 tracing = { version = "0.1.35", features = ["log"] }
-
-libc = "0.2.126"
-
-anyhow = "1.0.58"
+libc = "0.2.132"
+futures = "0.3.23"
 
 [features]
 default = ["flash_file_injection"]

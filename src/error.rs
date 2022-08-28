@@ -1,5 +1,4 @@
 use thiserror::Error;
-use tokio::task::JoinError;
 
 #[derive(Error, Debug)]
 pub enum MyError {
@@ -11,7 +10,4 @@ pub enum MyError {
 
     #[error("Popen Error")]
     PopenError(#[from] subprocess::PopenError),
-
-    #[error("Join error")]
-    JoinError(#[from] JoinError),
 }

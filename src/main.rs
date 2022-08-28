@@ -77,7 +77,10 @@ const FUZZ_DOUBLE_NAN: bool = false;
 const RANDOM_SWF_VERSION: bool = false;
 
 /// Number of threads to use
-const THREAD_COUNT: i32 = 2;
+const THREAD_COUNT: i32 = 1;
+
+/// Should threads be pinned to cores
+const PIN_THREADS: bool = true;
 
 /// Should low level timeing info be collected, like the time for running the file in each player
 pub const TIMING_DEBUG: bool = false;
@@ -86,7 +89,7 @@ pub const TIMING_DEBUG: bool = false;
 pub const SINGLE_ITER: bool = false;
 
 /// Should the input be removed after running a test
-pub const DELETE_SWF: bool = true;
+pub const DELETE_SWF: bool = false;
 
 /// Empty the flash log file, this avoids a crash were the file is missing
 fn clear_flash_log() -> Result<(), Box<dyn Error>> {
@@ -116,20 +119,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Ensure that the flash log exists or we will crash
     clear_flash_log()?;
 
-    // Start dedicated X server for fuzzing on linux TODO
-    // #[cfg(target_os = "linux")]
-    //     let _ = {
-    //     Exec::cmd("sudo")
-    //         .args(&["echo"])
-    //         .join().expect("Failed to elevate")
-    // };
-    // #[cfg(target_os = "linux")]
-    //     let popen = {
-    //         Exec::cmd("sudo")
-    //             .args(&["Xorg", ":2", "-config", "./docker-fuzz/xorg.conf", "-noreset", "-logfile", "/dev/null"])
-    //             .popen().expect("Failed to start Xorg server for fuzzing")
-    //     };
-
     //TODO: setup mm.cfg
 
     tracing::info!("Starting fuzz loop");
@@ -151,20 +140,22 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Create thread for each fuzzing job
     let threads = (0..THREAD_COUNT)
-        .map(|_thread_index| {
+        .map(|thread_index| {
             let state_copy = Arc::clone(&state);
             std::thread::spawn(move || {
-                // Attempt to pin threads to cores on linux (dissabled for now)
-                // #[cfg(target_os = "linux")]
-                //     {
-                //         let tid = unsafe { libc::pthread_self() };
-                //
-                //         let mut cpu_set: libc::cpu_set_t = unsafe { MaybeUninit::zeroed().assume_init() };
-                //         unsafe { libc::CPU_ZERO(&mut cpu_set) };
-                //         unsafe { libc::CPU_SET(thread_index as usize, &mut cpu_set) };
-                //
-                //         unsafe { libc::sched_setaffinity(tid as i32, core::mem::size_of::<libc::cpu_set_t>(), &cpu_set) };
-                //     }
+                if PIN_THREADS {
+                    // Attempt to pin threads to cores on linux
+                    #[cfg(target_os = "linux")]
+                    {
+                        let tid = unsafe { libc::pthread_self() };
+
+                        let mut cpu_set: libc::cpu_set_t = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
+                        unsafe { libc::CPU_ZERO(&mut cpu_set) };
+                        unsafe { libc::CPU_SET(thread_index as usize, &mut cpu_set) };
+
+                        unsafe { libc::sched_setaffinity(tid as i32, core::mem::size_of::<libc::cpu_set_t>(), &cpu_set) };
+                    }
+                }
 
                 // Start fuzzing
                 fuzz(state_copy).expect("Thread failed");
@@ -175,17 +166,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         x.join().expect("Thread failed to join or panic");
     }
 
-    // let _ = fuzz().await?;
-    // check_failures();
-
     Ok(())
 }
 
 // Write the opcodes to a file as well
-
-
 //TODO:
-// use a server and a bunch of VMs to do parallel fuzzing
 // Dynamic function more classes
 // Try using Class.prototype.func() with the wrong `this` arg
 // avm2 support

@@ -97,9 +97,6 @@ impl<'c> DoActionGenerator<'c> {
         }
     }
 
-    /// Generate a random object with a random number of members of random value, recursion not yet supported
-
-
     pub fn push<'v>(&mut self, sv: SimpleValue<'v>) -> Result<(), Box<dyn Error>>{
         match sv {
             SimpleValue::Undefined => {
@@ -295,13 +292,7 @@ impl<'c> DoActionGenerator<'c> {
                             };
                             strings.push(v.to_string().into_bytes());
                         }
-                        // Generate a decimal numerical string
-                        //TODO: dissabled as it can cause issues with some functions(yes that is a bug in the functions (guessing a unnessicary cast to float causing float mismatching) but its so common it makes spotting other issues hard)
-                        //TODO: dont forget to increase range above
-                        // 2 => {
-                        //     let v = rng.gen::<f32>();
-                        //     strings.push(v.to_string().into_bytes());
-                        // }
+                        //TODO: numerical strings?
                         _ => unreachable!(),
                     }
                 } else {
@@ -353,10 +344,6 @@ impl<'c> DoActionGenerator<'c> {
 
         // The name of the object
         self.push(SimpleValue::String(Cow::Borrowed("foo")))?;
-        /*let v = self.string("foo");
-        self.w.write_action(&Action::Push(Push {
-            values: vec![v],
-        }))?;*/
 
         // Push the args
         for _ in 0..arg_count {
@@ -367,14 +354,6 @@ impl<'c> DoActionGenerator<'c> {
 
         // The name, the arg count
         self.push(SimpleValue::Int(arg_count))?;
-        /*let v = self.string(class_name);
-        self.w.write_action(&Action::Push(Push {
-            values: vec![
-                Value::Int(arg_count),
-                v,
-            ],
-        }))?;*/
-        //TODO: some use newmethod
         self.push(SimpleValue::String(Cow::Borrowed(class_name)))?;
         self.w.write_action(&Action::NewObject)?;
         self.w.write_action(&Action::DefineLocal)?;
@@ -396,18 +375,11 @@ impl<'c> DoActionGenerator<'c> {
         // Get foo
         self.push(SimpleValue::String(Cow::Borrowed("foo")))?;
 
-        /*let foo = self.string("foo");
-        self.w.write_action(&Action::Push(Push {
-            values: vec![foo],
-        }))?;*/
+
         self.w.write_action(&Action::GetVariable)?;
 
         // Call foo.<function_name>()
         self.push(SimpleValue::String(Cow::Borrowed(function_name)))?;
-        /*let func_name = self.string(function_name);
-        self.w.write_action(&Action::Push(Push {
-            values: vec![func_name],
-        }))?;*/
         self.w.write_action(&Action::CallMethod)?;
 
         SwfGenerator::dump_stack(&mut self.w)?;
@@ -516,7 +488,7 @@ pub struct SwfGenerator {
 }
 
 impl SwfGenerator {
-    pub fn new(/*w: &mut Writer<&mut Vec<u8>>*/) -> Self {
+    pub fn new() -> Self {
         let rng = SmallRng::from_entropy();
 
         Self {
@@ -567,38 +539,6 @@ impl SwfGenerator {
         swf_header
     }
 
-    fn string<'gc, 's: 'gc>(&'s mut self, s: &str) -> Value<'gc> {
-        self.strings.push(s.as_bytes().to_owned());
-        Value::Str(SwfStr::from_bytes(self.strings.last().unwrap().as_slice()))
-    }
-
-    /// Select a random value from a slice
-    fn select<T: Clone>(&mut self, options: &[T]) -> T {
-        let index = self.rng.gen_range(0..options.len());
-        options[index].clone()
-    }
-
-    /// Generate a single random value
-    pub fn random_value_simple<'val, 's: 'val>(
-        &'s mut self,
-    ) -> Value<'val> {
-        match self.rng.gen_range(0..=7) {
-            0 => Value::Undefined,
-            1 => Value::Null,
-            2 => Value::Int(10),
-            3 => Value::Bool(self.rng.gen()),
-            4 => Value::Double(10.),
-            5 => Value::Float(10.),
-            6 => {
-                self.string("this is a test")
-            }
-            // 7 => {
-            //    // self.random_object_simple(w)
-            // }
-            _ => unreachable!(),
-        }
-    }
-
     /// Emit opcodes to trace entire stack
     fn dump_stack(w: &mut Writer<&mut Vec<u8>>) -> Result<(), Box<dyn Error>> {
         let pos = w.output.len();
@@ -623,82 +563,6 @@ impl SwfGenerator {
         let swf_version = self.swf_version();
         let swf_header = self.swf_header(swf_version);
         let mut dag = self.do_action_generator(swf_version);
-
-        // Generate a random value with random contents
-        fn random_value<'val, 'strings: 'val>(
-            rng: &mut rand::rngs::SmallRng,
-            strings: &'strings mut Vec<Vec<u8>>,
-        ) -> Value<'val> {
-            match rng.gen_range(0..=6) {
-                0 => Value::Undefined,
-                1 => Value::Null,
-                2 => Value::Int(if FUZZ_RANDOM_INT { rng.gen() } else { 10 }),
-                3 => Value::Bool(rng.gen()),
-                //TODO: double are also known to not match
-                4 => {
-                    if FUZZ_DOUBLE_NAN {
-                        match rng.gen_range(0..=1) {
-                            0 => Value::Double(if FUZZ_RANDOM_INT {
-                                rng.gen::<i64>() as f64
-                            } else {
-                                10.
-                            }),
-                            1 => Value::Double(f64::NAN /*rng.gen()*/),
-                            _ => unreachable!(),
-                        }
-                    } else {
-                        Value::Double(if FUZZ_RANDOM_INT {
-                            rng.gen::<i64>() as f64
-                        } else {
-                            10.
-                        })
-                    }
-                }
-                //TODO: floats are known to not match in ruffle
-                5 => Value::Float(f32::NAN /*rng.gen()*/),
-                6 => {
-                    if FUZZ_INT_STRING {
-                        // Decide if we should make a text, or numerical string
-                        match rng.gen_range(0..=1) {
-                            0 => {
-                                if FUZZ_RANDOM_STRING {
-                                    // Completely random bytes for strings
-                                    let max_string_len = 256;
-                                    let mut buf = Vec::<u8>::with_capacity(max_string_len);
-                                    buf.resize(rng.gen_range(1..max_string_len), 0);
-                                    rng.fill(buf.as_mut_slice());
-                                    strings.push(buf);
-                                } else {
-                                    strings.push("this is a test".as_bytes().to_vec())
-                                }
-                            }
-                            // Generate a integer numerical string
-                            1 => {
-                                let v = if FUZZ_RANDOM_INT {
-                                    rng.gen::<i32>()
-                                } else {
-                                    10
-                                };
-                                strings.push(v.to_string().into_bytes());
-                            }
-                            // Generate a decimal numerical string
-                            //TODO: dissabled as it can cause issues with some functions(yes that is a bug in the functions (guessing a unnessicary cast to float causing float mismatching) but its so common it makes spotting other issues hard)
-                            //TODO: dont forget to increase range above
-                            // 2 => {
-                            //     let v = rng.gen::<f32>();
-                            //     strings.push(v.to_string().into_bytes());
-                            // }
-                            _ => unreachable!(),
-                        }
-                    } else {
-                        strings.push("this is a test".as_bytes().to_vec())
-                    }
-
-                    Value::Str(SwfStr::from_bytes(strings.last().unwrap().as_slice()))
-                }
-                _ => unreachable!(),
-            }
-        }
 
         if DYNAMIC_FUNCTION_FUZZ {
             for _ in 0..10 {

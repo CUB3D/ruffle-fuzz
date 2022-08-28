@@ -19,11 +19,6 @@ pub struct SharedFuzzState {
 }
 
 pub fn fuzz(shared_state: Arc<SharedFuzzState>) -> Result<(), Box<dyn Error>> {
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .worker_threads(1)
-        .build()
-        .unwrap();
-
     let mut overall_duration = Duration::ZERO;
     let mut ruffle_duration = Duration::ZERO;
     let mut flash_duration = Duration::ZERO;
@@ -57,15 +52,12 @@ pub fn fuzz(shared_state: Arc<SharedFuzzState>) -> Result<(), Box<dyn Error>> {
             }
         };
 
-        let local = tokio::task::LocalSet::new();
+        let (ruffle_result, flash_result) = futures::executor::block_on(async {
+            let ruffle_res = open_ruffle(swf_content.clone()).await;
+            let flash_res = open_flash_cmd(swf_content.clone()).await;
 
-        let (ruffle_future, flash_future) = local.block_on(&rt, async {
-            let ruffle_future = tokio::task::spawn_local(open_ruffle(swf_content.clone()));
-            let flash_future = tokio::task::spawn_local(open_flash_cmd(swf_content.clone()));
-
-            tokio::join!(ruffle_future, flash_future)
+            (ruffle_res, flash_res)
         });
-        let (ruffle_result, flash_result) = (ruffle_future?, flash_future?);
 
         let (flash_res, flash_dur) = match flash_result {
             Ok(x) => Ok(x),
@@ -94,18 +86,9 @@ pub fn fuzz(shared_state: Arc<SharedFuzzState>) -> Result<(), Box<dyn Error>> {
 
             let _ = std::fs::create_dir(&specific_failure_dir);
 
-            rt.block_on(tokio::fs::write(
-                &specific_failure_dir.join("out.swf"),
-                &swf_content,
-            ))?;
-            rt.block_on(tokio::fs::write(
-                &specific_failure_dir.join("ruffle.txt"),
-                ruffle_res,
-            ))?;
-            rt.block_on(tokio::fs::write(
-                &specific_failure_dir.join("flash.txt"),
-                flash_res,
-            ))?;
+            std::fs::write(&specific_failure_dir.join("out.swf"), &swf_content)?;
+            std::fs::write(&specific_failure_dir.join("ruffle.txt"), ruffle_res)?;
+            std::fs::write(&specific_failure_dir.join("flash.txt"), flash_res)?;
         }
 
         if SINGLE_ITER {
