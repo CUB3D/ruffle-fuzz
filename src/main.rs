@@ -3,28 +3,28 @@ use crate::flash_projector_runner::open_flash_cmd;
 use crate::fuzz_session::{fuzz, SharedFuzzState};
 use crate::swf_generator::SwfGenerator;
 use env_logger::Env;
-use md5::Digest;
-use rand::RngCore;
-use rand::SeedableRng;
-use ruffle_core::backend::audio::NullAudioBackend;
-use ruffle_core::backend::log::LogBackend;
-use ruffle_core::backend::navigator::NullNavigatorBackend;
-use ruffle_core::backend::storage::MemoryStorageBackend;
-use ruffle_core::backend::ui::NullUiBackend;
-use ruffle_core::backend::video::NullVideoBackend;
-use ruffle_core::tag_utils::SwfMovie;
-use ruffle_render::backend::null::NullRenderer;
-use ruffle_render::backend::ViewportDimensions;
-use std::cell::RefCell;
+
+
+
+
+
+
+
+
+
+
+
+
+
 use std::error::Error;
 use std::fs::OpenOptions;
-use std::io::{Read, Write};
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
-use subprocess::{Exec, Redirection};
+use std::io::{Write};
+
+
+use std::sync::atomic::{Ordering};
+use std::sync::{Arc};
+use std::time::{Duration};
+
 
 pub mod error;
 pub mod failure_checker;

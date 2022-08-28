@@ -44,11 +44,6 @@ pub struct DoActionGenerator<'c> {
 }
 
 impl<'c> DoActionGenerator<'c> {
-    fn string<'gc, 's: 'gc>(&'s mut self, s: &str) -> Value<'gc> {
-        self.strings.push(s.as_bytes().to_owned());
-        Value::Str(SwfStr::from_bytes(self.strings.last().unwrap().as_slice()))
-    }
-
     /// Select a random value from a slice
     fn select<T: Clone>(&mut self, options: &[T]) -> T {
         let index = self.rng.gen_range(0..options.len());
@@ -66,7 +61,7 @@ impl<'c> DoActionGenerator<'c> {
             6 => SimpleValue::String(Cow::Borrowed("this is a test")),
             7 => {
                 if recursion_depth > 4 {
-                    return SimpleValue::Null;
+                    SimpleValue::Null
                 } else {
                     let mut members = Vec::new();
                     for _ in 0..self.rng.gen_range(0..5) {
@@ -79,7 +74,7 @@ impl<'c> DoActionGenerator<'c> {
             }
             8 => {
                 if recursion_depth > 4 {
-                    return SimpleValue::Null;
+                    SimpleValue::Null
                 } else {
                     let mut members = Vec::new();
                     for _ in 0..self.rng.gen_range(0..5) {
@@ -93,7 +88,7 @@ impl<'c> DoActionGenerator<'c> {
         }
     }
 
-    pub fn push<'v>(&mut self, sv: SimpleValue<'v>) -> Result<(), Box<dyn Error>> {
+    pub fn push(&mut self, sv: SimpleValue<'_>) -> Result<(), Box<dyn Error>> {
         match sv {
             SimpleValue::Undefined => {
                 self.w.write_action(&Action::Push(Push {
@@ -213,7 +208,7 @@ impl<'c> DoActionGenerator<'c> {
 
         for _ in 0..arg_count {
             self.w.write_action(&Action::Push(Push {
-                values: vec![Self::random_value(&mut self.rng, &mut self.strings)],
+                values: vec![Self::random_value(self.rng, &mut self.strings)],
             }))?;
         }
 
@@ -343,7 +338,7 @@ impl<'c> DoActionGenerator<'c> {
         // Push the args
         for _ in 0..arg_count {
             self.w.write_action(&Action::Push(Push {
-                values: vec![Self::random_value(&mut self.rng, &mut self.strings)],
+                values: vec![Self::random_value(self.rng, self.strings)],
             }))?;
         }
 
@@ -360,7 +355,7 @@ impl<'c> DoActionGenerator<'c> {
         // Push function args and arg count
         for _ in 0..function_arg_count {
             self.w.write_action(&Action::Push(Push {
-                values: vec![Self::random_value(&mut self.rng, &mut self.strings)],
+                values: vec![Self::random_value(self.rng, self.strings)],
             }))?;
         }
         self.w.write_action(&Action::Push(Push {
@@ -473,7 +468,7 @@ impl<'c> DoActionGenerator<'c> {
     }
 }
 
-pub struct SwfGenerator {
+pub(crate) struct SwfGenerator {
     rng: StdRng,
     strings: Vec<Vec<u8>>,
     do_action_bytes: Vec<u8>,
